@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI uses the service container below; production credentials live in Vercel.
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/commcoach
+  DIRECT_URL: postgresql://postgres:postgres@localhost:5432/commcoach
+  TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/commcoach_test
+  AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+  AI_PROVIDER: mock
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_DIR: .data/storage
+  NEXT_PUBLIC_APP_URL: http://localhost:3100
+  # Keep the build output where the Playwright web server expects it.
+  NEXT_DIST_DIR: .next-build
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: commcoach
+          TZ: UTC
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Create the test database
+        run: psql "$DATABASE_URL" -c 'CREATE DATABASE commcoach_test'
+
+      - name: Apply migrations and seed
+        run: |
+          npx prisma migrate deploy
+          npx prisma db seed
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run test:integration
+
+      - run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

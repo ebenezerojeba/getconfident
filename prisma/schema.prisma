@@ -1,0 +1,343 @@
+// Prisma 7: connection URLs live in prisma.config.ts (migrations) and the
+// runtime driver adapter (src/lib/db/client.ts).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────
+
+enum PracticeMode {
+  IMPROMPTU
+  INTERVIEW
+  PRESENTATION
+  STORYTELLING
+  DEBATE
+  ELEVATOR_PITCH
+  SALES_PITCH
+  NETWORKING
+  MEETING_SIMULATION
+  DAILY_CHALLENGE
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum TopicCategory {
+  EVERYDAY_LIFE
+  BUSINESS
+  TECHNOLOGY
+  LEADERSHIP
+  SCHOOL
+  DEBATE
+  CREATIVITY
+  PERSONAL_GROWTH
+  FUNNY
+  PRESENTATION
+  JOB_INTERVIEW
+  BEHAVIORAL
+  ICE_BREAKER
+  STORYTELLING
+  PUBLIC_SPEAKING
+}
+
+enum SessionStatus {
+  DRAFT
+  READY
+  COUNTDOWN
+  RECORDING
+  PROCESSING
+  TRANSCRIBING
+  ANALYZING
+  COMPLETED
+  PROCESSING_FAILED
+  TRANSCRIPTION_FAILED
+  ANALYSIS_FAILED
+  CANCELLED
+}
+
+enum RecordingKind {
+  VIDEO
+  AUDIO
+}
+
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
+enum NotificationType {
+  ACHIEVEMENT
+  REMINDER
+  WEEKLY_SUMMARY
+  SYSTEM
+}
+
+// ─── Users & authentication ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  /// Always stored lower-cased and trimmed.
+  email        String    @unique
+  passwordHash String
+  name         String
+  /// Short free-text goal captured during onboarding.
+  goal         String?
+  timezone     String    @default("UTC")
+  onboardedAt  DateTime?
+  /// Bumped when the password changes; used to invalidate other sessions.
+  passwordChangedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  authSessions     AuthSession[]
+  practiceSessions PracticeSession[]
+  recordings       Recording[]
+  topicHistory     TopicHistory[]
+  achievements     UserAchievement[]
+  preferences      UserPreferences?
+  notifications    Notification[]
+}
+
+/// Server-side session. The cookie holds a random token; only its SHA-256
+/// hash is stored here (`id`), so a database leak does not leak live sessions.
+model AuthSession {
+  id         String   @id
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Fixed-window counters used for rate limiting when Upstash Redis is not
+/// configured. Keys are namespaced, e.g. "auth:sign-in:ip:1.2.3.4".
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+model UserPreferences {
+  userId               String          @id
+  theme                ThemePreference @default(SYSTEM)
+  preferredDurationSec Int             @default(120)
+  preferredMode        PracticeMode    @default(IMPROMPTU)
+  preferredDifficulty  Difficulty      @default(MEDIUM)
+  preferredCategories  TopicCategory[] @default([])
+  language             String          @default("en")
+  practiceReminders    Boolean         @default(false)
+  reminderHour         Int?
+  weeklySummary        Boolean         @default(true)
+  achievementEmails    Boolean         @default(true)
+  inAppNotifications   Boolean         @default(true)
+  /// Keep raw recordings after analysis. When false they are deleted once analyzed.
+  keepRecordings       Boolean         @default(true)
+  updatedAt            DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Topics ─────────────────────────────────────────────────────────────
+
+model Topic {
+  id         String        @id @default(cuid())
+  text       String        @unique
+  category   TopicCategory
+  difficulty Difficulty
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+
+  history  TopicHistory[]
+  sessions PracticeSession[]
+
+  @@index([category, difficulty, isActive])
+}
+
+model TopicHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  topicId   String
+  shownAt   DateTime @default(now())
+  /// True when the user asked for another topic instead of practicing this one.
+  skipped   Boolean  @default(false)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([userId, shownAt])
+  @@index([userId, topicId])
+}
+
+// ─── Practice ───────────────────────────────────────────────────────────
+
+model PracticeSession {
+  id                String        @id @default(cuid())
+  userId            String
+  topicId           String?
+  /// Snapshot so history survives topic edits/deletion.
+  topicText         String
+  category          TopicCategory?
+  mode              PracticeMode  @default(IMPROMPTU)
+  difficulty        Difficulty    @default(MEDIUM)
+  targetDurationSec Int
+  elapsedSec        Int?
+  withVideo         Boolean       @default(false)
+  status            SessionStatus @default(DRAFT)
+  failureReason     String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic      Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  recording  Recording?
+  transcript Transcript?
+  analysis   SpeakingAnalysis?
+  followUps  FollowUpQuestion[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([userId, completedAt])
+}
+
+model Recording {
+  id         String        @id @default(cuid())
+  sessionId  String        @unique
+  userId     String
+  kind       RecordingKind
+  mimeType   String
+  sizeBytes  Int
+  durationMs Int?
+  /// Opaque key understood by the storage service (never a public URL).
+  storageKey String        @unique
+  /// Video sessions also upload a compact audio-only track used for
+  /// transcription (keeps uploads to the speech provider under its size limit).
+  audioStorageKey String?  @unique
+  audioMimeType   String?
+  audioSizeBytes  Int?
+  createdAt  DateTime      @default(now())
+
+  session PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Transcript {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  text        String
+  language    String?
+  durationSec Float?
+  /// Normalized segments: { start, end, text }[]
+  segments    Json     @default("[]")
+  /// Normalized words when the provider supplies them: { word, start, end }[]
+  words       Json?
+  provider    String
+  createdAt   DateTime @default(now())
+
+  session PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model SpeakingAnalysis {
+  id              String   @id @default(cuid())
+  sessionId       String   @unique
+  overallScore    Int
+  confidenceScore Int
+  grammarScore    Int
+  clarityScore    Int
+  wordsPerMinute  Float?
+  wordCount       Int
+  fillerCount     Int
+  fillerPerMinute Float
+  longPauseCount  Int      @default(0)
+  /// Full validated report (see src/features/ai-coach/schema.ts).
+  report          Json
+  /// Deterministic filler analysis (see src/features/filler-analysis).
+  fillerAnalysis  Json
+  provider        String
+  model           String
+  createdAt       DateTime @default(now())
+
+  session PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model FollowUpQuestion {
+  id          String    @id @default(cuid())
+  sessionId   String
+  order       Int
+  question    String
+  answerText  String?
+  /// Validated evaluation JSON for the answer.
+  evaluation  Json?
+  score       Int?
+  createdAt   DateTime  @default(now())
+  answeredAt  DateTime?
+
+  session PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, order])
+}
+
+// ─── Achievements & notifications ───────────────────────────────────────
+
+model Achievement {
+  /// Stable code, e.g. FIRST_PRACTICE.
+  id          String @id
+  name        String
+  description String
+  icon        String
+  sortOrder   Int    @default(0)
+
+  users UserAchievement[]
+}
+
+/// Composite primary key makes unlocking idempotent.
+model UserAchievement {
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  /// Session that triggered the unlock, if any.
+  sessionId     String?
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, achievementId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}

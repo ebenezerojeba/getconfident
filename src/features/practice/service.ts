@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { analyzeSpeech } from "@/features/ai-coach/coach";
 import { processAchievementsAndNotify } from "@/features/achievements/engine";
 import {
+  ALLOWED_MIME_TYPES,
   baseMimeType,
   containerMatchesMime,
   FILE_EXTENSION,
@@ -19,7 +20,7 @@ import type { Prisma, SessionStatus } from "@/generated/prisma/client";
 import { db } from "@/lib/db/client";
 import { AppError, isAppError, notFound } from "@/lib/errors";
 import { logger } from "@/lib/logger";
-import { getStorage } from "@/lib/storage";
+import { assertSafeKey, getStorage } from "@/lib/storage";
 import type { CreateSessionInput } from "@/lib/validation/practice";
 
 import { canTransition, retryFrom, UPLOADABLE_STATUSES } from "./state-machine";
@@ -114,10 +115,23 @@ export async function applySessionEvent(
 export type UploadedFile = { bytes: Uint8Array; mimeType: string };
 
 export function validateMediaFile(kind: "VIDEO" | "AUDIO", file: UploadedFile, maxBytes: number) {
-  if (file.bytes.byteLength === 0) {
+  validateMedia(
+    kind,
+    { size: file.bytes.byteLength, head: file.bytes, mimeType: file.mimeType },
+    maxBytes,
+  );
+}
+
+/** Size, type and magic-byte checks, given the file size and its first bytes. */
+function validateMedia(
+  kind: "VIDEO" | "AUDIO",
+  file: { size: number; head: Uint8Array; mimeType: string },
+  maxBytes: number,
+) {
+  if (file.size === 0) {
     throw new AppError("UPLOAD", "The recording is empty. Please record again.");
   }
-  if (file.bytes.byteLength > maxBytes) {
+  if (file.size > maxBytes) {
     throw new AppError(
       "UPLOAD",
       `The recording is too large (max ${Math.round(maxBytes / 1024 / 1024)} MB).`,
@@ -126,9 +140,67 @@ export function validateMediaFile(kind: "VIDEO" | "AUDIO", file: UploadedFile, m
   if (!isAllowedMimeType(kind, file.mimeType)) {
     throw new AppError("UPLOAD", "Unsupported recording format.");
   }
-  if (!containerMatchesMime(sniffContainer(file.bytes), file.mimeType)) {
+  if (!containerMatchesMime(sniffContainer(file.head), file.mimeType)) {
     throw new AppError("UPLOAD", "The file doesn't look like a valid recording.");
   }
+}
+
+async function loadUploadableSession(userId: string, sessionId: string, kind: "VIDEO" | "AUDIO") {
+  const session = await getOwnedSession(userId, sessionId);
+  if (!UPLOADABLE_STATUSES.includes(session.status)) {
+    throw new AppError("CONFLICT", "A recording was already submitted for this session.");
+  }
+  if ((kind === "VIDEO") !== session.withVideo) {
+    throw new AppError("UPLOAD", "Recording type doesn't match this session.");
+  }
+  return session;
+}
+
+/** Folder all of a session's recording files live under. */
+export function recordingPrefix(userId: string, sessionId: string) {
+  return `recordings/${userId}/${sessionId}/`;
+}
+
+type StoredFile = { key: string; mimeType: string; size: number };
+
+/** Writes the Recording row and moves the session to PROCESSING (once). */
+async function recordUpload(
+  session: Awaited<ReturnType<typeof getOwnedSession>>,
+  userId: string,
+  input: {
+    kind: "VIDEO" | "AUDIO";
+    durationMs: number;
+    elapsedSec: number;
+    media: StoredFile;
+    audio: StoredFile | null;
+  },
+) {
+  await db.$transaction(async (tx) => {
+    const moved = await tx.practiceSession.updateMany({
+      where: { id: session.id, userId, status: { in: [...UPLOADABLE_STATUSES] } },
+      data: {
+        status: "PROCESSING",
+        elapsedSec: input.elapsedSec,
+        startedAt: session.startedAt ?? new Date(Date.now() - input.elapsedSec * 1000),
+      },
+    });
+    if (moved.count !== 1)
+      throw new AppError("CONFLICT", "A recording was already submitted for this session.");
+    await tx.recording.create({
+      data: {
+        sessionId: session.id,
+        userId,
+        kind: input.kind,
+        mimeType: input.media.mimeType,
+        sizeBytes: input.media.size,
+        durationMs: input.durationMs || null,
+        storageKey: input.media.key,
+        audioStorageKey: input.audio?.key ?? null,
+        audioMimeType: input.audio?.mimeType ?? null,
+        audioSizeBytes: input.audio?.size ?? null,
+      },
+    });
+  });
 }
 
 /**
@@ -146,13 +218,7 @@ export async function saveRecording(
     elapsedSec: number;
   },
 ) {
-  const session = await getOwnedSession(userId, sessionId);
-  if (!UPLOADABLE_STATUSES.includes(session.status)) {
-    throw new AppError("CONFLICT", "A recording was already submitted for this session.");
-  }
-  if ((input.kind === "VIDEO") !== session.withVideo) {
-    throw new AppError("UPLOAD", "Recording type doesn't match this session.");
-  }
+  const session = await loadUploadableSession(userId, sessionId, input.kind);
 
   validateMediaFile(input.kind, input.media, MAX_RECORDING_BYTES[input.kind]);
   if (input.kind === "AUDIO" && input.media.bytes.byteLength > MAX_TRANSCRIPTION_BYTES) {
@@ -164,7 +230,7 @@ export async function saveRecording(
   }
 
   const storage = getStorage();
-  const prefix = `recordings/${userId}/${session.id}/${randomUUID()}`;
+  const prefix = `${recordingPrefix(userId, session.id)}${randomUUID()}`;
   const mediaMime = baseMimeType(input.media.mimeType);
   const storageKey = `${prefix}-media.${FILE_EXTENSION[mediaMime]}`;
   const audioMime = input.audio ? baseMimeType(input.audio.mimeType) : null;
@@ -174,31 +240,15 @@ export async function saveRecording(
   if (audioKey && input.audio) await storage.put(audioKey, input.audio.bytes, audioMime!);
 
   try {
-    await db.$transaction(async (tx) => {
-      const moved = await tx.practiceSession.updateMany({
-        where: { id: session.id, userId, status: { in: [...UPLOADABLE_STATUSES] } },
-        data: {
-          status: "PROCESSING",
-          elapsedSec: input.elapsedSec,
-          startedAt: session.startedAt ?? new Date(Date.now() - input.elapsedSec * 1000),
-        },
-      });
-      if (moved.count !== 1)
-        throw new AppError("CONFLICT", "A recording was already submitted for this session.");
-      await tx.recording.create({
-        data: {
-          sessionId: session.id,
-          userId,
-          kind: input.kind,
-          mimeType: mediaMime,
-          sizeBytes: input.media.bytes.byteLength,
-          durationMs: input.durationMs || null,
-          storageKey,
-          audioStorageKey: audioKey,
-          audioMimeType: audioMime,
-          audioSizeBytes: input.audio?.bytes.byteLength ?? null,
-        },
-      });
+    await recordUpload(session, userId, {
+      kind: input.kind,
+      durationMs: input.durationMs,
+      elapsedSec: input.elapsedSec,
+      media: { key: storageKey, mimeType: mediaMime, size: input.media.bytes.byteLength },
+      audio:
+        audioKey && input.audio
+          ? { key: audioKey, mimeType: audioMime!, size: input.audio.bytes.byteLength }
+          : null,
     });
   } catch (error) {
     // Don't leave orphaned files when the database write fails.
@@ -206,6 +256,114 @@ export async function saveRecording(
       storage.delete(storageKey),
       audioKey ? storage.delete(audioKey) : null,
     ]);
+    throw error;
+  }
+}
+
+const DIRECT_UPLOAD_NAME = /^[0-9a-f-]{36}-(media|audio)\.([a-z0-9]{2,5})$/;
+
+/**
+ * Checks a browser's request to upload a file straight to storage and returns
+ * the limits for its upload token. The pathname must sit in the user's own
+ * session folder, so a token can never write anywhere else.
+ */
+export async function authorizeRecordingUpload(
+  userId: string,
+  sessionId: string,
+  pathname: string,
+) {
+  const prefix = recordingPrefix(userId, sessionId);
+  const match = pathname.startsWith(prefix)
+    ? DIRECT_UPLOAD_NAME.exec(pathname.slice(prefix.length))
+    : null;
+  if (!match) throw new AppError("VALIDATION", "Invalid upload path.");
+  const [, role, ext] = match;
+
+  const session = await getOwnedSession(userId, sessionId);
+  if (!UPLOADABLE_STATUSES.includes(session.status)) {
+    throw new AppError("CONFLICT", "A recording was already submitted for this session.");
+  }
+  if (role === "audio" && !session.withVideo) {
+    throw new AppError("UPLOAD", "Recording type doesn't match this session.");
+  }
+  const kind = role === "media" && session.withVideo ? "VIDEO" : "AUDIO";
+  const allowedContentTypes = ALLOWED_MIME_TYPES[kind].filter(
+    (mime) => FILE_EXTENSION[mime] === ext,
+  );
+  if (allowedContentTypes.length === 0) {
+    throw new AppError("UPLOAD", "Unsupported recording format.");
+  }
+  return {
+    allowedContentTypes,
+    maximumSizeInBytes: kind === "VIDEO" ? MAX_RECORDING_BYTES.VIDEO : MAX_TRANSCRIPTION_BYTES,
+  };
+}
+
+async function readHead(key: string, length: number): Promise<Uint8Array> {
+  const stream = await getStorage().openRead(key, { start: 0, end: length - 1 });
+  return new Uint8Array(await new Response(stream).arrayBuffer()).subarray(0, length);
+}
+
+/**
+ * Attaches files the browser already uploaded straight to storage (used on
+ * Vercel, where request bodies are capped at ~4.5 MB). Each file gets the same
+ * checks as a server upload; on failure the files are deleted.
+ */
+export async function attachStoredRecording(
+  userId: string,
+  sessionId: string,
+  input: {
+    kind: "VIDEO" | "AUDIO";
+    media: { key: string; mimeType: string };
+    audio?: { key: string; mimeType: string } | null;
+    durationMs: number;
+    elapsedSec: number;
+  },
+) {
+  const prefix = recordingPrefix(userId, sessionId);
+  const files = input.audio ? [input.media, input.audio] : [input.media];
+  for (const f of files) {
+    if (!f.key.startsWith(prefix)) throw new AppError("VALIDATION", "Invalid recording reference.");
+    assertSafeKey(f.key);
+  }
+  const storage = getStorage();
+
+  const inspect = async (
+    f: { key: string; mimeType: string },
+    kind: "VIDEO" | "AUDIO",
+    maxBytes: number,
+  ): Promise<StoredFile> => {
+    const info = await storage.stat(f.key);
+    if (!info) throw new AppError("UPLOAD", "The upload didn't finish. Please try again.");
+    const mimeType = baseMimeType(f.mimeType);
+    if (FILE_EXTENSION[mimeType] !== f.key.slice(f.key.lastIndexOf(".") + 1)) {
+      throw new AppError("UPLOAD", "Unsupported recording format.");
+    }
+    const head = info.size > 0 ? await readHead(f.key, Math.min(info.size, 16)) : new Uint8Array();
+    validateMedia(kind, { size: info.size, head, mimeType }, maxBytes);
+    return { key: f.key, mimeType, size: info.size };
+  };
+
+  try {
+    const session = await loadUploadableSession(userId, sessionId, input.kind);
+    if (input.kind === "VIDEO" && !input.audio) {
+      throw new AppError("UPLOAD", "Missing the audio track for this video.");
+    }
+    if (input.kind === "AUDIO" && input.audio) {
+      throw new AppError("UPLOAD", "Recording type doesn't match this session.");
+    }
+    const media = await inspect(
+      input.media,
+      input.kind,
+      input.kind === "AUDIO" ? MAX_TRANSCRIPTION_BYTES : MAX_RECORDING_BYTES.VIDEO,
+    );
+    const audio = input.audio ? await inspect(input.audio, "AUDIO", MAX_TRANSCRIPTION_BYTES) : null;
+    await recordUpload(session, userId, { ...input, media, audio });
+  } catch (error) {
+    // On a conflict another submit already won and may own these files; keep them.
+    if (!(isAppError(error) && error.code === "CONFLICT")) {
+      await Promise.allSettled(files.map((f) => storage.delete(f.key)));
+    }
     throw error;
   }
 }

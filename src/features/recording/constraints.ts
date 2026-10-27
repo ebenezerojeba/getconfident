@@ -62,3 +62,9 @@ export function containerMatchesMime(container: ReturnType<typeof sniffContainer
   if (container === "mp4") return ext === "mp4" || ext === "m4a";
   return container === ext;
 }
+
+/**
+ * Largest upload that can go through a server function. Vercel rejects request
+ * bodies over ~4.5 MB, so bigger recordings upload straight to storage instead.
+ */
+export const MAX_FUNCTION_UPLOAD_BYTES = 4 * 1024 * 1024;

@@ -1,11 +1,14 @@
 import { processAchievementsForSession } from "@/features/achievements/engine";
 import {
   applySessionEvent,
+  attachStoredRecording,
+  authorizeRecordingUpload,
   createPracticeSession,
   deleteSession,
   deleteSessionRecording,
   getOwnedSession,
   processSession,
+  recordingPrefix,
   retrySessionProcessing,
   saveRecording,
 } from "@/features/practice/service";
@@ -268,5 +271,73 @@ describe("processing pipeline (mock provider)", () => {
     await deleteSession(user.id, b.id);
     expect(await db.practiceSession.count({ where: { id: b.id } })).toBe(0);
     expect(await getStorage().exists(recB.storageKey)).toBe(false);
+  });
+});
+
+describe("direct-to-storage uploads", () => {
+  const uuid = "123e4567-e89b-42d3-a456-426614174000";
+
+  it("only authorizes paths in the user's own session folder", async () => {
+    const alice = await createTestUser();
+    const mallory = await createTestUser();
+    const { id } = await newSession(alice.id);
+    const own = `${recordingPrefix(alice.id, id)}${uuid}-media.webm`;
+
+    await expect(authorizeRecordingUpload(alice.id, id, own)).resolves.toMatchObject({
+      allowedContentTypes: ["audio/webm"],
+      maximumSizeInBytes: 25 * 1024 * 1024,
+    });
+    // Someone else's session, a foreign folder, or a made-up name are all refused.
+    await expect(authorizeRecordingUpload(mallory.id, id, own)).rejects.toBeTruthy();
+    await expect(
+      authorizeRecordingUpload(alice.id, id, `recordings/${mallory.id}/${id}/${uuid}-media.webm`),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(
+      authorizeRecordingUpload(alice.id, id, `${recordingPrefix(alice.id, id)}../x-media.webm`),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    // Voice sessions have no separate audio track.
+    await expect(
+      authorizeRecordingUpload(alice.id, id, `${recordingPrefix(alice.id, id)}${uuid}-audio.webm`),
+    ).rejects.toMatchObject({ code: "UPLOAD" });
+  });
+
+  it("attaches stored files after checking them, and deletes bad ones", async () => {
+    const user = await createTestUser();
+    const { id } = await newSession(user.id);
+    const storage = getStorage();
+    const base = { kind: "AUDIO" as const, durationMs: 1000, elapsedSec: 1 };
+
+    const badKey = `${recordingPrefix(user.id, id)}${uuid}-media.webm`;
+    await storage.put(badKey, new Uint8Array(64), "audio/webm"); // no WebM header
+    await expect(
+      attachStoredRecording(user.id, id, {
+        ...base,
+        media: { key: badKey, mimeType: "audio/webm" },
+      }),
+    ).rejects.toMatchObject({ code: "UPLOAD" });
+    expect(await storage.exists(badKey)).toBe(false);
+
+    await expect(
+      attachStoredRecording(user.id, id, {
+        ...base,
+        media: { key: `recordings/other/${id}/${uuid}-media.webm`, mimeType: "audio/webm" },
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+
+    const key = `${recordingPrefix(user.id, id)}${uuid.replace("1", "2")}-media.webm`;
+    await storage.put(key, webm(), "audio/webm");
+    await attachStoredRecording(user.id, id, {
+      ...base,
+      media: { key, mimeType: "audio/webm;codecs=opus" },
+    });
+    const rec = await db.recording.findUniqueOrThrow({ where: { sessionId: id } });
+    expect(rec).toMatchObject({ storageKey: key, mimeType: "audio/webm", sizeBytes: 2048 });
+    expect((await getOwnedSession(user.id, id)).status).toBe("PROCESSING");
+
+    // A repeated submit conflicts but leaves the attached file alone.
+    await expect(
+      attachStoredRecording(user.id, id, { ...base, media: { key, mimeType: "audio/webm" } }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await storage.exists(key)).toBe(true);
   });
 });

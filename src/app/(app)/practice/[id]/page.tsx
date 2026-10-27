@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getMode } from "@/config/practice-modes";
 import { ProcessingView } from "@/features/practice/components/processing-view";
 import { SessionRunner } from "@/features/practice/components/session-runner";
+import { recordingPrefix } from "@/features/practice/service";
 import { UPLOADABLE_STATUSES } from "@/features/practice/state-machine";
 import { requireUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
@@ -30,6 +31,9 @@ export default async function PracticeSessionPage({ params }: { params: Promise<
           targetDurationSec: session.targetDurationSec,
           withVideo: session.withVideo,
         }}
+        directUploadPrefix={
+          process.env.STORAGE_DRIVER === "blob" ? recordingPrefix(user.id, session.id) : undefined
+        }
       />
     );
   }

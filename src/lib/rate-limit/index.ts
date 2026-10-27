@@ -26,6 +26,7 @@ export const RATE_LIMITS = {
   aiAnalysis: { limit: 30, windowMs: 60 * 60_000 },
   followUp: { limit: 60, windowMs: 60 * 60_000 },
   upload: { limit: 30, windowMs: 60 * 60_000 },
+  uploadToken: { limit: 60, windowMs: 60 * 60_000 },
   topics: { limit: 120, windowMs: 60_000 },
 } satisfies Record<string, RateLimitRule>;
 

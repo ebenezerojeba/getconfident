@@ -595,7 +595,7 @@ History
 
 OPENAI_API_KEY=
 
-UPLOADTHING_TOKEN=
+BLOB_READ_WRITE_TOKEN=
 
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
@@ -712,9 +712,14 @@ Do not mark AI integration complete until the real provider has been tested.
     transcription, under the 25 MB provider limit). Media is served only through
     /api/recordings/[sessionId] with an ownership check and Range support; there are never
     public URLs.
-    Production constraint: Vercel functions cap request bodies at ~4.5 MB. Voice uploads fit;
-    longer video uploads need direct-to-storage uploads (UploadThing presigned URLs) before
-    production. Tracked as a Phase 24 blocker.
+    Vercel functions cap request and response bodies at ~4.5 MB. With STORAGE_DRIVER=blob the
+    browser uploads straight to private Vercel Blob storage: POST /api/sessions/[id]/upload-token
+    issues a short-lived token locked to one pathname in the user's session folder (type and
+    size limits included), then POST /api/sessions/[id]/recording with a JSON body attaches
+    the files after re-checking size, type and magic bytes (bad files are deleted). The
+    multipart form upload remains for the local driver. Playback streams 206 partial
+    responses of at most 4 MB each. Follow-up answers still go through the function and are
+    capped client-side at 4 MB (~8 minutes of voice).
 
     33.7 Local database for development and tests
     No Docker is required: scripts/db-local.mjs runs a real PostgreSQL 18 server via
@@ -736,12 +741,14 @@ Do not mark AI integration complete until the real provider has been tested.
        tier data-retention terms for user speech) or set OPENAI_API_KEY with no base URL
        to use OpenAI directly.
     b) Database. Create a Neon project; set DATABASE_URL (pooled) and DIRECT_URL
-       (direct, used by Prisma Migrate). Run `prisma migrate deploy` and `prisma db seed`.
+       (direct, used by Prisma Migrate). Production deploys run `prisma migrate deploy` and
+       the idempotent seed automatically (scripts/vercel-build.mjs); previews skip both.
     c) Storage. STORAGE_DRIVER=local is development-only and refuses to run on Vercel.
-       Implement a StorageDriver for the chosen object store (UploadThing/S3/Vercel Blob).
-       Video uploads must move to direct-to-storage (presigned) uploads: Vercel functions
-       cap request bodies at ~4.5 MB, while a few minutes of video is tens of megabytes.
-       Voice-only recordings fit comfortably today.
+       DONE (2026-09-28): STORAGE_DRIVER=blob uses a private Vercel Blob store
+       (src/lib/storage/blob.ts; token BLOB_READ_WRITE_TOKEN). Account deletion removes
+       the user's objects by prefix (StorageDriver.deletePrefix). DONE (2026-10-27):
+       recordings upload directly from the browser to Blob and playback is chunked, so
+       the ~4.5 MB function body limit no longer applies (see 33.6).
     d) Email. Set RESEND_API_KEY and RESEND_FROM_EMAIL; without them the app logs emails
        instead of sending them. Verify the sending domain before enabling reminders.
     e) Scheduled jobs. Set CRON_SECRET; vercel.json already schedules the hourly

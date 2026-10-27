@@ -65,8 +65,9 @@ function buildCsp(nonce: string | null): string {
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
     "font-src 'self' data:",
-    // The app only talks to its own origin (AI calls happen server-side).
-    `connect-src 'self'${dev ? " ws: http://localhost:*" : ""}`,
+    // The app talks to its own origin (AI calls happen server-side), plus
+    // Vercel Blob for direct recording uploads.
+    `connect-src 'self' https://vercel.com https://*.blob.vercel-storage.com${dev ? " ws: http://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

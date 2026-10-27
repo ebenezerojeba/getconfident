@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MEDIA_ERROR_MESSAGES } from "@/features/recording/media";
+import { MAX_FUNCTION_UPLOAD_BYTES } from "@/features/recording/constraints";
 import { useMediaRecorder } from "@/features/recording/use-media-recorder";
 import { ApiError, apiFetch, uploadWithProgress } from "@/lib/api-client";
 import { scoreTone } from "@/features/ai-coach/components/report-parts";
@@ -96,6 +97,10 @@ export function FollowUpSection({
     setAnswering(false);
     recorder.release();
     if (!result || !pending) return;
+    if (result.media.size > MAX_FUNCTION_UPLOAD_BYTES) {
+      toast.error("That answer is too long to submit. Keep follow-up answers under 5 minutes.");
+      return;
+    }
     setBusy(true);
     try {
       const form = new FormData();

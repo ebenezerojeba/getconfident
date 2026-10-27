@@ -1,36 +1,22 @@
 import "server-only";
 
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 
 import { AppError } from "@/lib/errors";
 
-/**
- * Object storage abstraction for recordings. Keys are opaque, server-generated
- * and never exposed as public URLs; media is streamed through an authorized
- * route handler (/api/recordings/[id]).
- */
-export interface StorageDriver {
-  readonly name: string;
-  put(key: string, data: Uint8Array, contentType: string): Promise<void>;
-  get(key: string): Promise<Uint8Array<ArrayBuffer>>;
-  delete(key: string): Promise<void>;
-  exists(key: string): Promise<boolean>;
-}
+import { assertSafeKey, assertSafePrefix, type StorageDriver } from "./keys";
+import { createBlobDriver } from "./blob";
 
-const KEY_PATTERN = /^[a-z0-9][a-z0-9/_-]{0,200}\.[a-z0-9]{2,5}$/i;
-
-export function assertSafeKey(key: string) {
-  if (!KEY_PATTERN.test(key) || key.includes("..") || key.includes("//")) {
-    throw new AppError("VALIDATION", "Invalid storage key.");
-  }
-}
+export { assertSafeKey, assertSafePrefix, type ByteRange, type StorageDriver } from "./keys";
 
 /** Local filesystem driver for development/tests (not for serverless production). */
 export function createLocalDriver(root: string): StorageDriver {
   const base = path.resolve(root);
-  const resolve = (key: string) => {
-    assertSafeKey(key);
+  const resolve = (key: string, check = assertSafeKey) => {
+    check(key);
     const full = path.resolve(base, key);
     if (!full.startsWith(base + path.sep)) throw new AppError("VALIDATION", "Invalid storage key.");
     return full;
@@ -60,6 +46,27 @@ export function createLocalDriver(root: string): StorageDriver {
         return false;
       }
     },
+    async deletePrefix(prefix) {
+      await rm(resolve(prefix, assertSafePrefix), { recursive: true, force: true });
+    },
+    async stat(key) {
+      try {
+        const info = await stat(resolve(key));
+        return info.isFile() ? { size: info.size } : null;
+      } catch {
+        return null;
+      }
+    },
+    async openRead(key, range) {
+      const full = resolve(key);
+      try {
+        await stat(full);
+      } catch (cause) {
+        throw new AppError("NOT_FOUND", "Recording file not found.", { cause });
+      }
+      const stream = createReadStream(full, range ? { start: range.start, end: range.end } : {});
+      return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
+    },
   };
 }
 
@@ -75,6 +82,10 @@ export function getStorage(): StorageDriver {
       });
     }
     driver = createLocalDriver(process.env.STORAGE_LOCAL_DIR || ".data/storage");
+    return driver;
+  }
+  if (kind === "blob") {
+    driver = createBlobDriver();
     return driver;
   }
   throw new AppError("EXTERNAL_SERVICE", "Recording storage is not configured.", {

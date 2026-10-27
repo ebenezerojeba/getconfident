@@ -51,4 +51,15 @@ export const uploadMetaSchema = z.object({
     .max(11 * 60),
 });
 
+const storedFileSchema = z.object({
+  key: z.string().min(1).max(300),
+  mimeType: z.string().min(1).max(100),
+});
+
+/** A recording the browser already uploaded straight to storage. */
+export const storedRecordingSchema = uploadMetaSchema.extend({
+  media: storedFileSchema,
+  audio: storedFileSchema.nullish(),
+});
+
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;

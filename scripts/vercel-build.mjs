@@ -9,10 +9,16 @@ const run = (cmd) => execSync(cmd, { stdio: "inherit" });
 
 if (process.env.VERCEL_ENV === "production") {
   if (!process.env.DIRECT_URL && !process.env.DATABASE_URL) {
-    throw new Error("Set DATABASE_URL and DIRECT_URL in Vercel before deploying.");
+    // Lets the very first deploy succeed before the database is configured.
+    // Add DATABASE_URL + DIRECT_URL in Vercel, then redeploy to set up the tables.
+    console.warn(
+      "[vercel-build] WARNING: DATABASE_URL/DIRECT_URL not set: skipping migrations. " +
+        "The app will not work until you add them and redeploy.",
+    );
+  } else {
+    run("npx prisma migrate deploy");
+    run("npx prisma db seed");
   }
-  run("npx prisma migrate deploy");
-  run("npx prisma db seed");
 } else {
   console.log(
     `[vercel-build] VERCEL_ENV=${process.env.VERCEL_ENV ?? "unset"}: skipping migrations`,

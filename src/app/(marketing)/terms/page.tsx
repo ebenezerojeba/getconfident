@@ -16,7 +16,7 @@ export default function TermsPage() {
       <p>
         These terms apply when you use {siteConfig.name}. By creating an account, you agree to them.
         Please also read our{" "}
-        <Link href="/privacy" className="text-primary underline-offset-4 hover:underline">
+        <Link href="/privacy" className="text-primary underline underline-offset-4">
           privacy policy
         </Link>
         .

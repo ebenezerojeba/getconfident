@@ -32,7 +32,7 @@ export function ContactLine() {
   return siteConfig.contactEmail ? (
     <a
       href={`mailto:${siteConfig.contactEmail}`}
-      className="font-medium text-primary underline-offset-4 hover:underline"
+      className="font-medium text-primary underline underline-offset-4"
     >
       {siteConfig.contactEmail}
     </a>

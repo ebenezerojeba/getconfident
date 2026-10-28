@@ -100,7 +100,7 @@ export default function PrivacyPage() {
         <ul>
           <li>
             <strong>Download your data</strong> from{" "}
-            <Link href="/settings" className="text-primary underline-offset-4 hover:underline">
+            <Link href="/settings" className="text-primary underline underline-offset-4">
               Settings
             </Link>{" "}
             (recordings excluded).

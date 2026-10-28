@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 
 import { expect, test } from "./fixtures";
 
-const PUBLIC_PAGES = ["/", "/sign-in", "/sign-up"];
+const PUBLIC_PAGES = ["/", "/sign-in", "/sign-up", "/forgot-password", "/privacy", "/terms"];
 
 for (const scheme of ["light", "dark"] as const) {
   test.describe(`accessibility (${scheme})`, () => {

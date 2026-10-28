@@ -180,7 +180,7 @@ export async function signOutOtherSessionsAction(): Promise<ActionState> {
   };
 }
 
-export const RESET_REQUESTED_MESSAGE =
+const RESET_REQUESTED_MESSAGE =
   "If an account exists for that email, we've sent a link to reset your password. Check your inbox (and spam folder).";
 
 /**

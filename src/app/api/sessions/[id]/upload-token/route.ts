@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { authorizeRecordingUpload } from "@/features/practice/service";
 import { parseId, withUser } from "@/lib/api";
-import { AppError } from "@/lib/errors";
+import { AppError, isAppError } from "@/lib/errors";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
@@ -19,6 +19,16 @@ export const POST = withUser<{ id: string }>(
     if (process.env.STORAGE_DRIVER !== "blob") {
       throw new AppError("NOT_FOUND", "Direct uploads are not enabled.");
     }
+    // Browser upload tokens are signed with the store's read-write token. A
+    // store connected only through Vercel OIDC (BLOB_STORE_ID) can't issue them.
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new AppError("EXTERNAL_SERVICE", "Direct uploads are not available right now.", {
+        cause: new Error(
+          "BLOB_READ_WRITE_TOKEN is not set. Copy it from the Blob store's page in Vercel " +
+            "into the project's environment variables, then redeploy.",
+        ),
+      });
+    }
 
     let body: HandleUploadBody;
     try {
@@ -31,20 +41,28 @@ export const POST = withUser<{ id: string }>(
       throw new AppError("VALIDATION", "Unsupported upload request.");
     }
 
-    const result = await handleUpload({
-      body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        const limits = await authorizeRecordingUpload(user.id, sessionId, pathname);
-        return {
-          ...limits,
-          addRandomSuffix: false,
-          allowOverwrite: false,
-          validUntil: Date.now() + 15 * 60_000,
-        };
-      },
-    });
-    return NextResponse.json(result);
+    try {
+      const result = await handleUpload({
+        body,
+        request: req,
+        onBeforeGenerateToken: async (pathname) => {
+          const limits = await authorizeRecordingUpload(user.id, sessionId, pathname);
+          return {
+            ...limits,
+            addRandomSuffix: false,
+            allowOverwrite: false,
+            validUntil: Date.now() + 15 * 60_000,
+          };
+        },
+      });
+      return NextResponse.json(result);
+    } catch (error) {
+      if (isAppError(error)) throw error;
+      // Logged with the SDK's message so the cause shows up in Vercel logs.
+      throw new AppError("EXTERNAL_SERVICE", "Couldn't start the upload. Please try again.", {
+        cause: error,
+      });
+    }
   },
   { rateLimit: { name: "upload-token", rule: RATE_LIMITS.uploadToken } },
 );

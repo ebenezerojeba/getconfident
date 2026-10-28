@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 
 import { type ActionState, errorState, fieldErrorsFrom } from "@/lib/actions";
@@ -9,17 +10,24 @@ import { getCurrentSession } from "@/lib/auth/current-user";
 import {
   authenticate,
   changePassword,
+  createPasswordResetLink,
   INVALID_CREDENTIALS_MESSAGE,
   registerUser,
+  resetPasswordWithToken,
 } from "@/lib/auth/service";
 import { createSession, invalidateSessionToken } from "@/lib/auth/session";
+import { siteConfig } from "@/config/site";
 import { db } from "@/lib/db/client";
+import { getEmailProvider, isEmailConfigured } from "@/lib/email/client";
+import { passwordResetEmail } from "@/lib/email/templates";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { consumeRateLimit, enforceRateLimit, RATE_LIMITS, resetRateLimit } from "@/lib/rate-limit";
 import { getClientIp, getUserAgent } from "@/lib/request";
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   safeRedirectPath,
   signInSchema,
   signUpSchema,
@@ -170,4 +178,94 @@ export async function signOutOtherSessionsAction(): Promise<ActionState> {
     status: "success",
     message: count ? `Signed out of ${count} other session(s).` : "No other active sessions.",
   };
+}
+
+export const RESET_REQUESTED_MESSAGE =
+  "If an account exists for that email, we've sent a link to reset your password. Check your inbox (and spam folder).";
+
+/**
+ * Emails a password reset link. Always answers the same way, whether or not
+ * the account exists, and sends after responding so timing reveals nothing.
+ */
+export async function requestPasswordResetAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const raw = { email: String(formData.get("email") ?? "") };
+  const parsed = forgotPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: fieldErrorsFrom(parsed.error),
+      values: raw,
+    };
+  }
+  const { email } = parsed.data;
+
+  try {
+    await enforceRateLimit(
+      `auth:password-reset:ip:${await getClientIp()}`,
+      RATE_LIMITS.passwordResetIp,
+    );
+    const perEmail = await consumeRateLimit(
+      `auth:password-reset:email:${email}`,
+      RATE_LIMITS.passwordResetEmail,
+    );
+    if (perEmail.success) {
+      after(async () => {
+        try {
+          const link = await createPasswordResetLink(email, siteConfig.url);
+          if (!link) return;
+          if (!isEmailConfigured()) {
+            if (process.env.NODE_ENV === "production") {
+              logger.error("auth.password_reset_email_not_configured", {});
+              return;
+            }
+            // Development only: there is no inbox, so print the link.
+            logger.info("auth.password_reset_link_dev", { url: link.url });
+            return;
+          }
+          await getEmailProvider().send(
+            passwordResetEmail({ to: link.user.email, name: link.user.name, resetUrl: link.url }),
+          );
+          logger.info("auth.password_reset_requested", {});
+        } catch (error) {
+          logger.error("auth.password_reset_email_failed", { error });
+        }
+      });
+    }
+  } catch (error) {
+    return { ...errorState(error, "auth.password_reset_request_failed"), values: raw };
+  }
+  return { status: "success", message: RESET_REQUESTED_MESSAGE };
+}
+
+/** Sets a new password from a reset link, then sends the user to sign in. */
+export async function resetPasswordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = resetPasswordSchema.safeParse({
+    token: String(formData.get("token") ?? ""),
+    password: String(formData.get("password") ?? ""),
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: fieldErrorsFrom(parsed.error),
+    };
+  }
+  try {
+    await enforceRateLimit(
+      `auth:password-reset:ip:${await getClientIp()}`,
+      RATE_LIMITS.passwordResetIp,
+    );
+    const userId = await resetPasswordWithToken(parsed.data.token, parsed.data.password);
+    logger.info("auth.password_reset", { userId });
+  } catch (error) {
+    return errorState(error, "auth.password_reset_failed");
+  }
+  redirect("/sign-in?reset=1");
 }

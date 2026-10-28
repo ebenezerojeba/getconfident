@@ -4,6 +4,8 @@ export const siteConfig = {
   description:
     "Practice impromptu speaking with random topics, a focused timer and instant AI feedback on clarity, confidence, structure and filler words.",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  /** Shown on the privacy and terms pages for data requests and questions. */
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "",
 } as const;
 
 export type NavItem = {

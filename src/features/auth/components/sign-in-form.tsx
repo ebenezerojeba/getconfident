@@ -49,6 +49,15 @@ export function SignInForm({ next, notice }: { next?: string; notice?: string })
         {(p) => <PasswordInput {...p} autoComplete="current-password" required />}
       </ActionField>
 
+      <p className="-mt-2 text-right text-sm">
+        <Link
+          href="/forgot-password"
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Forgot password?
+        </Link>
+      </p>
+
       <Button type="submit" size="lg" className="h-11 w-full" disabled={pending}>
         {pending ? <Spinner label="Signing in" /> : null}
         {pending ? "Signing in..." : "Sign in"}

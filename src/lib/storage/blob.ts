@@ -22,9 +22,11 @@ const defaultApi: BlobApi = { put, get, head, del, list };
  * BLOB_READ_WRITE_TOKEN, which Vercel adds when a Blob store is connected.
  */
 export function createBlobDriver(api: BlobApi = defaultApi): StorageDriver {
-  if (api === defaultApi && !process.env.BLOB_READ_WRITE_TOKEN) {
+  // Either a read-write token or a store connected through Vercel OIDC works
+  // for server-side reads/writes (browser upload tokens need the read-write token).
+  if (api === defaultApi && !process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) {
     throw new AppError("EXTERNAL_SERVICE", "Recording storage is not configured.", {
-      cause: new Error("STORAGE_DRIVER=blob requires BLOB_READ_WRITE_TOKEN"),
+      cause: new Error("STORAGE_DRIVER=blob requires BLOB_READ_WRITE_TOKEN (or BLOB_STORE_ID)"),
     });
   }
 

@@ -712,8 +712,11 @@ Do not mark AI integration complete until the real provider has been tested.
     transcription, under the 25 MB provider limit). Media is served only through
     /api/recordings/[sessionId] with an ownership check and Range support; there are never
     public URLs.
-    Vercel functions cap request and response bodies at ~4.5 MB. With STORAGE_DRIVER=blob the
-    browser uploads straight to private Vercel Blob storage: POST /api/sessions/[id]/upload-token
+    Vercel functions cap request and response bodies at ~4.5 MB. Recordings up to 4 MB in
+    total go through the server (multipart form). Larger ones, with STORAGE_DRIVER=blob, are
+    uploaded by the browser straight to private Vercel Blob storage (this needs
+    BLOB_READ_WRITE_TOKEN; a store connected only via OIDC/BLOB_STORE_ID can't issue
+    browser upload tokens): POST /api/sessions/[id]/upload-token
     issues a short-lived token locked to one pathname in the user's session folder (type and
     size limits included), then POST /api/sessions/[id]/recording with a JSON body attaches
     the files after re-checking size, type and magic bytes (bad files are deleted). The
@@ -765,6 +768,15 @@ Do not mark AI integration complete until the real provider has been tested.
        offered fix is next@16 (a breaking major outside this project's stated stack).
        postcss runs at build time over first-party CSS only. Re-evaluate when moving to
        Next 16.
+
+    33.8b Password reset and legal pages
+    /forgot-password emails a one-hour reset link (Resend; in development the link is logged).
+    Tokens are HMAC-signed with AUTH_SECRET over the user's current password hash, so they are
+    not stored and stop working once the password changes (single use). Requests always get
+    the same response and the email is sent after responding, so they don't reveal which
+    emails have accounts. A reset signs the user out everywhere. /privacy and /terms are
+    static pages (listed in the middleware's STATIC_PAGES); NEXT_PUBLIC_CONTACT_EMAIL sets
+    the contact address shown on them.
 
     33.9 Content Security Policy
     Middleware emits a CSP per request. Dynamically rendered routes get a nonce

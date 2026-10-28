@@ -23,6 +23,8 @@ export const RATE_LIMITS = {
   signInEmail: { limit: 8, windowMs: 15 * 60_000 },
   signUpIp: { limit: 5, windowMs: 60 * 60_000 },
   passwordChange: { limit: 5, windowMs: 15 * 60_000 },
+  passwordResetIp: { limit: 10, windowMs: 60 * 60_000 },
+  passwordResetEmail: { limit: 3, windowMs: 60 * 60_000 },
   aiAnalysis: { limit: 30, windowMs: 60 * 60_000 },
   followUp: { limit: 60, windowMs: 60 * 60_000 },
   upload: { limit: 30, windowMs: 60 * 60_000 },

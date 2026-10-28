@@ -79,6 +79,13 @@ export const changePasswordSchema = z
     error: "Choose a password different from your current one.",
   });
 
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "This reset link is invalid.").max(300),
+  password: passwordSchema,
+});
+
 /** Only allow same-origin relative redirects after sign-in (prevents open redirects). */
 export function safeRedirectPath(value: unknown, fallback = "/dashboard"): string {
   if (typeof value !== "string") return fallback;

@@ -26,7 +26,7 @@ const CSRF_EXEMPT_API = ["/api/inngest", "/api/health"];
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Routes Next prerenders to static HTML (no per-request nonce possible). */
-const STATIC_PAGES = new Set(["/", "/styleguide"]);
+const STATIC_PAGES = new Set(["/", "/styleguide", "/privacy", "/terms"]);
 
 function isProtected(pathname: string) {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -67,7 +67,7 @@ function buildCsp(nonce: string | null): string {
     "font-src 'self' data:",
     // The app talks to its own origin (AI calls happen server-side), plus
     // Vercel Blob for direct recording uploads.
-    `connect-src 'self' https://vercel.com https://*.blob.vercel-storage.com${dev ? " ws: http://localhost:*" : ""}`,
+    `connect-src 'self' https://vercel.com https://blob.vercel-storage.com https://*.blob.vercel-storage.com${dev ? " ws: http://localhost:*" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

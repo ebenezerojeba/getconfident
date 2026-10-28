@@ -20,12 +20,19 @@ const footerLinks = [
       { title: "Dashboard", href: "/dashboard" },
     ],
   },
+  {
+    heading: "Legal",
+    links: [
+      { title: "Privacy policy", href: "/privacy" },
+      { title: "Terms of service", href: "/terms" },
+    ],
+  },
 ];
 
 export function SiteFooter() {
   return (
     <footer className="border-t">
-      <div className="container-page grid gap-10 py-12 sm:grid-cols-[2fr_1fr_1fr]">
+      <div className="container-page grid gap-10 py-12 sm:grid-cols-[2fr_1fr_1fr_1fr]">
         <div className="space-y-3">
           <Logo />
           <p className="max-w-xs text-sm text-muted-foreground">{siteConfig.description}</p>

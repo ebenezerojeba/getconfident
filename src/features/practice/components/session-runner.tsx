@@ -33,7 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatTimerOption } from "@/config/practice";
-import { MAX_RECORDING_BYTES } from "@/features/recording/constraints";
+import { MAX_FUNCTION_UPLOAD_BYTES, MAX_RECORDING_BYTES } from "@/features/recording/constraints";
 import { uploadToStorage } from "@/features/recording/direct-upload";
 import { MEDIA_ERROR_MESSAGES } from "@/features/recording/media";
 import { useAudioLevel } from "@/features/recording/use-audio-level";
@@ -308,41 +308,53 @@ export function SessionRunner({
     setUpload({ progress: 0, error: null });
     const durationMs = result.durationMs;
     const elapsedSec = Math.round(timer.elapsedMs / 1000);
+    const totalBytes = result.media.size + (result.audio?.size ?? 0);
+
+    const uploadThroughServer = async () => {
+      const form = new FormData();
+      form.set("kind", kind);
+      form.set("durationMs", String(durationMs));
+      form.set("elapsedSec", String(elapsedSec));
+      form.set("media", result.media, withVideo ? "recording.webm" : "audio.webm");
+      if (result.audio) form.set("audio", result.audio, "audio.webm");
+      await uploadWithProgress(`/api/sessions/${session.id}/recording`, form, (p) =>
+        setUpload({ progress: p, error: null }),
+      );
+    };
+
+    const uploadDirect = async (prefix: string) => {
+      const total = totalBytes || 1;
+      const loaded = { media: 0, audio: 0 };
+      const report = () =>
+        setUpload({ progress: Math.min(1, (loaded.media + loaded.audio) / total), error: null });
+      const common = { sessionId: session.id, prefix };
+      const [media, audio] = await Promise.all([
+        uploadToStorage(result.media, {
+          ...common,
+          role: "media",
+          onProgress: (n) => ((loaded.media = n), report()),
+        }),
+        result.audio
+          ? uploadToStorage(result.audio, {
+              ...common,
+              role: "audio",
+              onProgress: (n) => ((loaded.audio = n), report()),
+            })
+          : null,
+      ]);
+      await apiFetch(`/api/sessions/${session.id}/recording`, {
+        method: "POST",
+        json: { kind, durationMs, elapsedSec, media, audio },
+      });
+    };
+
     try {
-      if (directUploadPrefix) {
-        const total = result.media.size + (result.audio?.size ?? 0) || 1;
-        const loaded = { media: 0, audio: 0 };
-        const report = () =>
-          setUpload({ progress: Math.min(1, (loaded.media + loaded.audio) / total), error: null });
-        const common = { sessionId: session.id, prefix: directUploadPrefix };
-        const [media, audio] = await Promise.all([
-          uploadToStorage(result.media, {
-            ...common,
-            role: "media",
-            onProgress: (n) => ((loaded.media = n), report()),
-          }),
-          result.audio
-            ? uploadToStorage(result.audio, {
-                ...common,
-                role: "audio",
-                onProgress: (n) => ((loaded.audio = n), report()),
-              })
-            : null,
-        ]);
-        await apiFetch(`/api/sessions/${session.id}/recording`, {
-          method: "POST",
-          json: { kind, durationMs, elapsedSec, media, audio },
-        });
+      // Small recordings go through the server: fewer moving parts. Larger ones
+      // upload straight to storage (server request bodies are capped at ~4.5 MB).
+      if (!directUploadPrefix || totalBytes <= MAX_FUNCTION_UPLOAD_BYTES) {
+        await uploadThroughServer();
       } else {
-        const form = new FormData();
-        form.set("kind", kind);
-        form.set("durationMs", String(durationMs));
-        form.set("elapsedSec", String(elapsedSec));
-        form.set("media", result.media, withVideo ? "recording.webm" : "audio.webm");
-        if (result.audio) form.set("audio", result.audio, "audio.webm");
-        await uploadWithProgress(`/api/sessions/${session.id}/recording`, form, (p) =>
-          setUpload({ progress: p, error: null }),
-        );
+        await uploadDirect(directUploadPrefix);
       }
       setResult(null);
       setPhase("processing");

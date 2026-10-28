@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; signedOut?: string }>;
+  searchParams: Promise<{ next?: string; signedOut?: string; reset?: string }>;
 }) {
   const params = await searchParams;
   const next = safeRedirectPath(params.next);
@@ -26,7 +26,13 @@ export default async function SignInPage({
       <CardContent>
         <SignInForm
           next={params.next ? next : undefined}
-          notice={params.signedOut ? "You've been signed out." : undefined}
+          notice={
+            params.reset
+              ? "Your password was changed. Sign in with your new password."
+              : params.signedOut
+                ? "You've been signed out."
+                : undefined
+          }
         />
       </CardContent>
     </Card>

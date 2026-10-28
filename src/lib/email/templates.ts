@@ -12,7 +12,15 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function layout(heading: string, bodyHtml: string, cta?: { label: string; href: string }) {
+const SETTINGS_FOOTER = `You're receiving this because of your notification settings.
+      <a href="${siteConfig.url}/settings" style="color:#4f46e5">Change them here</a>.`;
+
+function layout(
+  heading: string,
+  bodyHtml: string,
+  cta?: { label: string; href: string },
+  footerHtml: string = SETTINGS_FOOTER,
+) {
   return `<!doctype html>
 <html lang="en"><body style="margin:0;background:#f5f5fb;font-family:ui-sans-serif,system-ui,sans-serif;color:#1b1b2b">
   <div style="max-width:560px;margin:0 auto;padding:32px 24px">
@@ -27,8 +35,7 @@ function layout(heading: string, bodyHtml: string, cta?: { label: string; href: 
       }
     </div>
     <p style="color:#6b6b83;font-size:12px;margin:24px 0 0">
-      You're receiving this because of your notification settings.
-      <a href="${siteConfig.url}/settings" style="color:#4f46e5">Change them here</a>.
+      ${footerHtml}
     </p>
   </div>
 </body></html>`;
@@ -108,5 +115,31 @@ export function weeklySummaryEmail(params: {
       { label: "View your progress", href: `${siteConfig.url}/progress` },
     ),
     text: `Your week in speaking\n${rows.map(([l, v]) => `${l}: ${v}`).join("\n")}\n${siteConfig.url}/progress`,
+  };
+}
+
+export function passwordResetEmail(params: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}): EmailMessage {
+  const name = escapeHtml(params.name.split(" ")[0] || "there");
+  return {
+    to: params.to,
+    subject: `Reset your ${siteConfig.name} password`,
+    html: layout(
+      `Hi ${name}, reset your password`,
+      `<p style="margin:0;line-height:1.6">We got a request to reset your password. The link below works once and expires in 1 hour.</p>`,
+      { label: "Choose a new password", href: escapeHtml(params.resetUrl) },
+      "If you didn't ask for this, you can ignore this email. Your password won't change.",
+    ),
+    text: [
+      `Hi ${params.name.split(" ")[0] || "there"},`,
+      "",
+      "We got a request to reset your password. This link works once and expires in 1 hour:",
+      params.resetUrl,
+      "",
+      "If you didn't ask for this, you can ignore this email. Your password won't change.",
+    ].join("\n"),
   };
 }

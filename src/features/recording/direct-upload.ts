@@ -38,8 +38,10 @@ export async function uploadToStorage(
       onUploadProgress: ({ loaded }) => opts.onProgress(loaded),
     });
   } catch (error) {
+    // Keep the real cause visible in the browser console for debugging.
+    console.error("[upload] direct upload to storage failed", error);
     if (error instanceof ApiError) throw error;
-    throw new ApiError("Upload failed. Check your connection and try again.", 0, "UPLOAD");
+    throw new ApiError("We couldn't upload your recording. Please try again.", 0, "DIRECT_UPLOAD");
   }
   return { key, mimeType };
 }

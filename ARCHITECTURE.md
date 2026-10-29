@@ -36,7 +36,7 @@ Services
  UploadThing or secure object storage
  Upstash Redis
  Inngest for long-running/retryable jobs
- Resend where email is required
+ Nodemailer (any SMTP server) where email is required
  Vercel deployment
 
 3. Architecture Principles
@@ -584,7 +584,7 @@ History
     ├── UploadThing
     ├── Upstash Redis
     ├── Inngest
-    └── Resend
+    └── SMTP (Nodemailer)
     Use separate production credentials/data where appropriate.
 
 29. Environment Variables
@@ -603,8 +603,11 @@ UPSTASH_REDIS_REST_TOKEN=
 INNGEST_EVENT_KEY=
 INNGEST_SIGNING_KEY=
 
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASSWORD=
+EMAIL_FROM=
 Never commit real credentials.
 
 30. Development Order
@@ -754,7 +757,8 @@ Do not mark AI integration complete until the real provider has been tested.
        the user's objects by prefix (StorageDriver.deletePrefix). DONE (2026-10-27):
        recordings upload directly from the browser to Blob and playback is chunked, so
        the ~4.5 MB function body limit no longer applies (see 33.6).
-    d) Email. Set RESEND_API_KEY and RESEND_FROM_EMAIL; without them the app logs emails
+    d) Email. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and EMAIL_FROM (Nodemailer);
+       without them the app logs emails
        instead of sending them. Verify the sending domain before enabling reminders.
     e) Scheduled jobs. Set CRON_SECRET; vercel.json already schedules the hourly
        /api/cron/notifications job.
@@ -772,7 +776,7 @@ Do not mark AI integration complete until the real provider has been tested.
        Next 16.
 
     33.8b Password reset and legal pages
-    /forgot-password emails a one-hour reset link (Resend; in development the link is logged).
+    /forgot-password emails a one-hour reset link (SMTP via Nodemailer; in development the link is logged).
     Tokens are HMAC-signed with AUTH_SECRET over the user's current password hash, so they are
     not stored and stop working once the password changes (single use). Requests always get
     the same response and the email is sent after responding, so they don't reveal which

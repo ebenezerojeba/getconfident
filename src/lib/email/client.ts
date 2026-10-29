@@ -1,5 +1,7 @@
 import "server-only";
 
+import nodemailer, { type Transporter } from "nodemailer";
+
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
@@ -15,44 +17,62 @@ export interface EmailProvider {
   send(message: EmailMessage): Promise<{ id: string }>;
 }
 
-/**
- * Resend via its REST API (no SDK dependency, same approach as the AI client).
- */
-export const resendProvider: EmailProvider = {
-  name: "resend",
+/** SMTP settings from the environment, or null when email isn't set up. */
+export function smtpConfig() {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASSWORD;
+  const from = process.env.EMAIL_FROM;
+  if (!host || !user || !pass || !from) return null;
+  const port = Number(process.env.SMTP_PORT || 587);
+  return {
+    host,
+    port,
+    // Port 465 uses TLS from the start; 587 upgrades with STARTTLS.
+    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465,
+    auth: { user, pass },
+    from,
+  };
+}
+
+let transporter: Transporter | null = null;
+
+function getTransporter(config: NonNullable<ReturnType<typeof smtpConfig>>): Transporter {
+  transporter ??= nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.auth,
+    // Fail fast in serverless functions instead of hanging on a bad server.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+  return transporter;
+}
+
+/** Sends through any SMTP server (Gmail, Zoho, Brevo, Mailgun, SES, ...) via Nodemailer. */
+export const smtpProvider: EmailProvider = {
+  name: "smtp",
   async send(message) {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESEND_FROM_EMAIL;
-    if (!apiKey || !from) {
+    const config = smtpConfig();
+    if (!config) {
       throw new AppError("EXTERNAL_SERVICE", "Email is not configured.", {
-        cause: new Error("RESEND_API_KEY / RESEND_FROM_EMAIL missing"),
+        cause: new Error("SMTP_HOST / SMTP_USER / SMTP_PASSWORD / EMAIL_FROM missing"),
       });
     }
-    let res: Response;
     try {
-      res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from,
-          to: [message.to],
-          subject: message.subject,
-          html: message.html,
-          text: message.text,
-        }),
-        signal: AbortSignal.timeout(15_000),
+      const info = await getTransporter(config).sendMail({
+        from: config.from,
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
       });
+      return { id: info.messageId ?? "unknown" };
     } catch (cause) {
       throw new AppError("EXTERNAL_SERVICE", "Couldn't send the email.", { cause });
     }
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new AppError("EXTERNAL_SERVICE", "Couldn't send the email.", {
-        cause: new Error(`Resend ${res.status}: ${body.slice(0, 300)}`),
-      });
-    }
-    const json = (await res.json()) as { id?: string };
-    return { id: json.id ?? "unknown" };
   },
 };
 
@@ -66,10 +86,12 @@ export const logEmailProvider: EmailProvider = {
 };
 
 export function getEmailProvider(): EmailProvider {
-  return process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL
-    ? resendProvider
-    : logEmailProvider;
+  return smtpConfig() ? smtpProvider : logEmailProvider;
 }
 
-export const isEmailConfigured = () =>
-  Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
+export const isEmailConfigured = () => smtpConfig() !== null;
+
+/** Test hook: forget the cached SMTP connection. */
+export function resetEmailTransport() {
+  transporter = null;
+}

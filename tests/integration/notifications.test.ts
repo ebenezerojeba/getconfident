@@ -1,6 +1,8 @@
+import nodemailer from "nodemailer";
 import { processAchievementsAndNotify } from "@/features/achievements/engine";
 import { runNotificationCron } from "@/features/notifications/service";
 import { db } from "@/lib/db/client";
+import { resetEmailTransport } from "@/lib/email/client";
 
 import { createTestUser } from "../support/factories";
 
@@ -66,20 +68,30 @@ describe("notification cron", () => {
   it("never throws when email delivery fails", async () => {
     const user = await createTestUser({ timezone: "UTC" });
     await setPrefs(user.id, { practiceReminders: true, reminderHour: 18, weeklySummary: false });
-    const originalKey = process.env.RESEND_API_KEY;
-    const originalFrom = process.env.RESEND_FROM_EMAIL;
-    process.env.RESEND_API_KEY = "re_test";
-    process.env.RESEND_FROM_EMAIL = "coach@example.com";
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+    const keys = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "EMAIL_FROM"] as const;
+    const original = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    Object.assign(process.env, {
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USER: "coach@example.com",
+      SMTP_PASSWORD: "test-password",
+      EMAIL_FROM: "Coach <coach@example.com>",
+    });
+    resetEmailTransport();
+    const transportSpy = vi.spyOn(nodemailer, "createTransport").mockReturnValue({
+      sendMail: vi.fn().mockRejectedValue(new Error("network down")),
+    } as never);
     try {
       const result = await runNotificationCron(MONDAY_18);
       expect(result.reminders).toBe(0); // delivery failed
       // The in-app notification is still recorded.
       expect(await db.notification.count({ where: { userId: user.id, type: "REMINDER" } })).toBe(1);
     } finally {
-      fetchSpy.mockRestore();
-      process.env.RESEND_API_KEY = originalKey;
-      process.env.RESEND_FROM_EMAIL = originalFrom;
+      transportSpy.mockRestore();
+      resetEmailTransport();
+      for (const k of keys) {
+        if (original[k] === undefined) delete process.env[k];
+        else process.env[k] = original[k];
+      }
     }
   });
 });

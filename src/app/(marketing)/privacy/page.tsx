@@ -78,7 +78,7 @@ export default function PrivacyPage() {
             create the transcript and feedback.
           </li>
           <li>
-            <strong>Resend:</strong> delivers our emails.
+            <strong>Our email provider:</strong> delivers our emails.
           </li>
         </ul>
         <p className="mt-3">

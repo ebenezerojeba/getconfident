@@ -38,12 +38,14 @@ import { uploadInChunks } from "@/features/recording/chunked-upload";
 import { uploadToStorage } from "@/features/recording/direct-upload";
 import { MEDIA_ERROR_MESSAGES } from "@/features/recording/media";
 import { useAudioLevel } from "@/features/recording/use-audio-level";
+import { useLiveCoach } from "@/features/recording/use-live-coach";
 import { type RecordingResult, useMediaRecorder } from "@/features/recording/use-media-recorder";
 import { ApiError, apiFetch, uploadWithProgress } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 import { formatClock } from "../timer";
 import { useTimer } from "../use-timer";
+import { LiveCoachPanel, LiveCoachToggle, useLiveCoachPreference } from "./live-coach";
 import { ProcessingView } from "./processing-view";
 
 type Phase = "prepare" | "countdown" | "recording" | "review" | "uploading" | "processing";
@@ -173,6 +175,12 @@ export function SessionRunner({
 
   const finishRef = useRef<() => void>(() => {});
   const timer = useTimer(session.targetDurationSec * 1000, () => finishRef.current());
+  const coachPref = useLiveCoachPreference();
+  const coach = useLiveCoach({
+    enabled: coachPref.enabled && phase === "recording",
+    listening: phase === "recording" && timer.status === "running",
+    elapsedMs: timer.elapsedMs,
+  });
 
   const previewUrl = useMemo(() => (result ? URL.createObjectURL(result.media) : null), [result]);
   useEffect(
@@ -201,6 +209,7 @@ export function SessionRunner({
     setBusy(true);
     try {
       await sendEvent(session.id, "countdown");
+      coach.reset();
       setCount(3);
       setPhase("countdown");
     } catch (e) {
@@ -478,6 +487,9 @@ export function SessionRunner({
                   {busy ? <Spinner label="Starting" /> : <Play />}
                   Start
                 </Button>
+                {coachPref.supported ? (
+                  <LiveCoachToggle enabled={coachPref.enabled} onChange={coachPref.setEnabled} />
+                ) : null}
               </>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
@@ -538,6 +550,16 @@ export function SessionRunner({
               <LevelMeter level={timer.status === "paused" ? 0 : level} />
             </div>
           </div>
+          {coachPref.enabled ? (
+            <LiveCoachPanel
+              fillerCount={coach.fillerCount}
+              topFillers={coach.topFillers}
+              lastFiller={coach.lastFiller}
+              wpm={coach.wpm}
+              pace={coach.pace}
+              blocked={coach.blocked}
+            />
+          ) : null}
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Button variant="outline" size="lg" onClick={togglePause}>
               {timer.status === "paused" ? <Play /> : <Pause />}

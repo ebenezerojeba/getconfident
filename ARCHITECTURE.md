@@ -784,6 +784,23 @@ Do not mark AI integration complete until the real provider has been tested.
     static pages (listed in the proxy's STATIC_PAGES); NEXT_PUBLIC_CONTACT_EMAIL sets
     the contact address shown on them.
 
+    33.8c Engagement and cost features (2026-10-29)
+    - Live coach (opt-in, remembered per device): during recording the browser's Web
+      Speech API transcribes speech and the same filler detector as the report
+      (src/features/filler-analysis) shows filler count and words-per-minute live
+      (src/features/recording/use-live-coach.ts). Hidden where unsupported. In Chrome
+      the speech is processed by Google, which is why it is off by default and
+      disclosed on the toggle and in the privacy policy.
+    - Share result: GET /api/sessions/[id]/share-card renders a 1080x1080 PNG (score,
+      four stats, topic; never transcript or recording) for the owner only; the report
+      page shares it via the Web Share API or downloads it.
+    - Installable app: src/app/manifest.ts plus generated icons (/icons/*.png,
+      /apple-icon). No service worker (no offline caching).
+    - Daily session cap: DAILY_SESSION_LIMIT (default 15) submissions per rolling 24h,
+      tracked in RateLimitBucket ("practice:daily:<userId>") so deleting sessions
+      doesn't reset it. Checked when a session starts and counted on submit
+      (src/features/practice/daily-limit.ts); the practice page warns at 3 or fewer.
+
     33.9 Content Security Policy
     Middleware emits a CSP per request. Dynamically rendered routes get a nonce
     ('strict-dynamic'), which Next applies to its own scripts and which is forwarded to

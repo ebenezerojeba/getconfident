@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy policy" updated="October 28, 2026">
+    <LegalPage title="Privacy policy" updated="October 29, 2026">
       <p>
         {siteConfig.name} helps you practise speaking by recording you and giving AI feedback. That
         means we handle personal data, including recordings of your voice and, if you choose, your
@@ -79,6 +79,11 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Our email provider:</strong> delivers our emails.
+          </li>
+          <li>
+            <strong>Your browser&apos;s speech service (only if you turn on Live coach):</strong>{" "}
+            transcribes your speech in real time to show filler words and pace while you record. In
+            Chrome this is processed by Google. Live coach is off unless you switch it on.
           </li>
         </ul>
         <p className="mt-3">

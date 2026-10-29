@@ -25,7 +25,9 @@ import {
   ScoreDial,
   scoreLabel,
 } from "@/features/ai-coach/components/report-parts";
+import { siteConfig } from "@/config/site";
 import { SessionActions } from "@/features/ai-coach/components/session-actions";
+import { ShareResultButton } from "@/features/ai-coach/components/share-result-button";
 import { getSessionReport } from "@/features/ai-coach/report-data";
 import { DIMENSIONS, TOASTMASTERS_CRITERIA } from "@/features/ai-coach/schema";
 import { FollowUpSection } from "@/features/follow-up/components/follow-up-section";
@@ -123,6 +125,12 @@ export default async function SessionReportPage({ params }: { params: Promise<{ 
             </h1>
             <p className="font-medium text-primary">{scoreLabel(report.overallScore)}</p>
             <p className="text-muted-foreground">{report.summary}</p>
+            <ShareResultButton
+              sessionId={session.id}
+              score={report.overallScore}
+              appName={siteConfig.name}
+              appUrl={siteConfig.url}
+            />
           </div>
         </CardContent>
       </Card>

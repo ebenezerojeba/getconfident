@@ -25,6 +25,7 @@ import { logger } from "@/lib/logger";
 import { assertSafeKey, getStorage } from "@/lib/storage";
 import type { CreateSessionInput } from "@/lib/validation/practice";
 
+import { assertDailySessionsLeft, consumeDailySession } from "./daily-limit";
 import { canTransition, retryFrom, UPLOADABLE_STATUSES } from "./state-machine";
 
 /** Loads a session owned by the user or throws NOT_FOUND (never reveals others' sessions). */
@@ -35,6 +36,7 @@ export async function getOwnedSession(userId: string, sessionId: string) {
 }
 
 export async function createPracticeSession(userId: string, input: CreateSessionInput) {
+  await assertDailySessionsLeft(userId);
   const topic = await db.topic.findFirst({
     where: { id: input.topicId, isActive: true },
     select: { id: true, text: true, category: true },
@@ -177,6 +179,7 @@ async function recordUpload(
     audio: StoredFile | null;
   },
 ) {
+  await consumeDailySession(userId);
   await db.$transaction(async (tx) => {
     const moved = await tx.practiceSession.updateMany({
       where: { id: session.id, userId, status: { in: [...UPLOADABLE_STATUSES] } },

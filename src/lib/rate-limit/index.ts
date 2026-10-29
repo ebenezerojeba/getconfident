@@ -76,3 +76,20 @@ export async function enforceRateLimit(key: string, rule: RateLimitRule): Promis
 export async function resetRateLimit(key: string): Promise<void> {
   await db.rateLimitBucket.deleteMany({ where: { key } });
 }
+
+/** Reads a limit's current usage without counting a new attempt. */
+export async function peekRateLimit(
+  key: string,
+  rule: RateLimitRule,
+): Promise<{ used: number; remaining: number; resetAt: Date | null }> {
+  const bucket = await db.rateLimitBucket.findUnique({ where: { key } });
+  // Prisma reads the stored UTC timestamp back as a proper Date.
+  if (!bucket || bucket.resetAt.getTime() <= Date.now()) {
+    return { used: 0, remaining: rule.limit, resetAt: null };
+  }
+  return {
+    used: bucket.count,
+    remaining: Math.max(0, rule.limit - bucket.count),
+    resetAt: bucket.resetAt,
+  };
+}

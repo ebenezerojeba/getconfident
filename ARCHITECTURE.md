@@ -716,7 +716,9 @@ Do not mark AI integration complete until the real provider has been tested.
     total go through the server (multipart form). Larger ones, with STORAGE_DRIVER=blob, are
     uploaded by the browser straight to private Vercel Blob storage (this needs
     BLOB_READ_WRITE_TOKEN; a store connected only via OIDC/BLOB_STORE_ID can't issue
-    browser upload tokens): POST /api/sessions/[id]/upload-token
+    browser upload tokens). Without that token, or if the direct upload fails, large
+    recordings upload through the server in 3.5 MB parts (POST /api/sessions/[id]/recording-chunk)
+    and are joined into one file on submit. Direct-upload details: POST /api/sessions/[id]/upload-token
     issues a short-lived token locked to one pathname in the user's session folder (type and
     size limits included), then POST /api/sessions/[id]/recording with a JSON body attaches
     the files after re-checking size, type and magic bytes (bad files are deleted). The

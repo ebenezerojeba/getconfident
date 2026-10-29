@@ -68,3 +68,9 @@ export function containerMatchesMime(container: ReturnType<typeof sniffContainer
  * bodies over ~4.5 MB, so bigger recordings upload straight to storage instead.
  */
 export const MAX_FUNCTION_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+/** Size of each piece when a large recording uploads through the server in parts. */
+export const UPLOAD_CHUNK_BYTES = 3.5 * 1024 * 1024;
+
+/** Most parts one file may have (64 × 3.5 MB = 224 MB, above every size limit). */
+export const MAX_UPLOAD_CHUNKS = 64;

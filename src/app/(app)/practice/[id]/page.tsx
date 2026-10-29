@@ -32,7 +32,11 @@ export default async function PracticeSessionPage({ params }: { params: Promise<
           withVideo: session.withVideo,
         }}
         directUploadPrefix={
-          process.env.STORAGE_DRIVER === "blob" ? recordingPrefix(user.id, session.id) : undefined
+          // Browser-to-storage uploads need the store's read-write token;
+          // without it, large recordings upload through the server in parts.
+          process.env.STORAGE_DRIVER === "blob" && process.env.BLOB_READ_WRITE_TOKEN
+            ? recordingPrefix(user.id, session.id)
+            : undefined
         }
       />
     );

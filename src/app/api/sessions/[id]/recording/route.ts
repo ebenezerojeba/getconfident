@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 
 import {
-  attachStoredRecording,
+  attachRecordingUpload,
   deleteSessionRecording,
   processSession,
   saveRecording,
@@ -54,9 +54,9 @@ export const POST = withUser<{ id: string }>(
   async (req, { user, params }) => {
     const sessionId = parseId(params.id, "Session");
     if (req.headers.get("content-type")?.startsWith("application/json")) {
-      // Files were uploaded straight to storage; attach them to the session.
+      // Files are already in storage (direct upload or parts); attach them.
       const input = await parseJson(req, storedRecordingSchema);
-      await attachStoredRecording(user.id, sessionId, input);
+      await attachRecordingUpload(user.id, sessionId, input);
     } else {
       await saveFromForm(req, user.id, sessionId);
     }

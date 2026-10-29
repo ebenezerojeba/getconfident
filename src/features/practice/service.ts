@@ -12,7 +12,9 @@ import {
   isAllowedMimeType,
   MAX_RECORDING_BYTES,
   MAX_TRANSCRIPTION_BYTES,
+  MAX_UPLOAD_CHUNKS,
   sniffContainer,
+  UPLOAD_CHUNK_BYTES,
 } from "@/features/recording/constraints";
 import { getTranscriptionService } from "@/features/transcription/service";
 import { normalizedTranscriptSchema } from "@/features/transcription/types";
@@ -302,6 +304,146 @@ export async function authorizeRecordingUpload(
 async function readHead(key: string, length: number): Promise<Uint8Array> {
   const stream = await getStorage().openRead(key, { start: 0, end: length - 1 });
   return new Uint8Array(await new Response(stream).arrayBuffer()).subarray(0, length);
+}
+
+// ── Uploads in parts ─────────────────────────────────────────────────────────
+// Large recordings can upload through the server in pieces below Vercel's
+// ~4.5 MB request limit, then get joined into one file. This needs no browser
+// upload token, so it works however the storage is connected.
+
+const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+type UploadRole = "media" | "audio";
+
+function chunkKey(prefix: string, uploadId: string, role: UploadRole, index: number) {
+  return `${prefix}${uploadId}-${role}-${index}.part`;
+}
+
+function assertChunkRef(uploadId: string, role: string, index: number) {
+  if (
+    !UPLOAD_ID.test(uploadId) ||
+    (role !== "media" && role !== "audio") ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= MAX_UPLOAD_CHUNKS
+  ) {
+    throw new AppError("VALIDATION", "Invalid upload part.");
+  }
+}
+
+/** Stores one piece of a recording that is uploading in parts. */
+export async function storeRecordingChunk(
+  userId: string,
+  sessionId: string,
+  input: { uploadId: string; role: string; index: number; bytes: Uint8Array },
+) {
+  assertChunkRef(input.uploadId, input.role, input.index);
+  if (input.bytes.byteLength === 0 || input.bytes.byteLength > UPLOAD_CHUNK_BYTES) {
+    throw new AppError("UPLOAD", "Invalid upload part size.");
+  }
+  const session = await getOwnedSession(userId, sessionId);
+  if (!UPLOADABLE_STATUSES.includes(session.status)) {
+    throw new AppError("CONFLICT", "A recording was already submitted for this session.");
+  }
+  if (input.role === "audio" && !session.withVideo) {
+    throw new AppError("UPLOAD", "Recording type doesn't match this session.");
+  }
+  const key = chunkKey(
+    recordingPrefix(userId, sessionId),
+    input.uploadId,
+    input.role as UploadRole,
+    input.index,
+  );
+  await getStorage().put(key, input.bytes, "application/octet-stream");
+}
+
+export type ChunkedFile = { uploadId: string; parts: number; mimeType: string };
+
+/** Joins a file's parts into one stored file and removes the parts. */
+async function assembleChunkedFile(
+  userId: string,
+  sessionId: string,
+  role: UploadRole,
+  file: ChunkedFile,
+  maxBytes: number,
+): Promise<{ key: string; mimeType: string }> {
+  if (!Number.isInteger(file.parts) || file.parts < 1 || file.parts > MAX_UPLOAD_CHUNKS) {
+    throw new AppError("VALIDATION", "Invalid upload.");
+  }
+  assertChunkRef(file.uploadId, role, file.parts - 1);
+  const mimeType = baseMimeType(file.mimeType);
+  const ext = FILE_EXTENSION[mimeType];
+  if (!ext) throw new AppError("UPLOAD", "Unsupported recording format.");
+
+  const prefix = recordingPrefix(userId, sessionId);
+  const storage = getStorage();
+  const keys = Array.from({ length: file.parts }, (_, i) =>
+    chunkKey(prefix, file.uploadId, role, i),
+  );
+  try {
+    const sizes = await Promise.all(keys.map((k) => storage.stat(k)));
+    if (sizes.some((s) => !s)) {
+      throw new AppError("UPLOAD", "The upload didn't finish. Please try again.");
+    }
+    const total = sizes.reduce((sum, s) => sum + s!.size, 0);
+    if (total > maxBytes) {
+      throw new AppError(
+        "UPLOAD",
+        `The recording is too large (max ${Math.round(maxBytes / 1024 / 1024)} MB).`,
+      );
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const k of keys) {
+      const part = await storage.get(k);
+      bytes.set(part, offset);
+      offset += part.byteLength;
+    }
+    const key = `${prefix}${file.uploadId}-${role}.${ext}`;
+    await storage.put(key, bytes, mimeType);
+    return { key, mimeType };
+  } finally {
+    await Promise.allSettled(keys.map((k) => storage.delete(k)));
+  }
+}
+
+type FileRef = { key: string; mimeType: string } | ChunkedFile;
+
+/**
+ * Attaches a recording that is already in storage: either uploaded straight to
+ * storage by the browser, or uploaded in parts (which are joined first).
+ */
+export async function attachRecordingUpload(
+  userId: string,
+  sessionId: string,
+  input: {
+    kind: "VIDEO" | "AUDIO";
+    media: FileRef;
+    audio?: FileRef | null;
+    durationMs: number;
+    elapsedSec: number;
+  },
+) {
+  // Check first, so a repeated submit gets a clear conflict, not a missing-parts error.
+  await loadUploadableSession(userId, sessionId, input.kind);
+  const resolve = async (ref: FileRef, role: UploadRole, maxBytes: number) =>
+    "key" in ref ? ref : assembleChunkedFile(userId, sessionId, role, ref, maxBytes);
+  const media = await resolve(
+    input.media,
+    "media",
+    input.kind === "AUDIO" ? MAX_TRANSCRIPTION_BYTES : MAX_RECORDING_BYTES.VIDEO,
+  );
+  let audio: { key: string; mimeType: string } | null = null;
+  try {
+    if (input.audio) audio = await resolve(input.audio, "audio", MAX_TRANSCRIPTION_BYTES);
+  } catch (error) {
+    if (!("key" in input.media))
+      await getStorage()
+        .delete(media.key)
+        .catch(() => {});
+    throw error;
+  }
+  await attachStoredRecording(userId, sessionId, { ...input, media, audio });
 }
 
 /**

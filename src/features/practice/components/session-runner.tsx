@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatTimerOption } from "@/config/practice";
 import { MAX_FUNCTION_UPLOAD_BYTES, MAX_RECORDING_BYTES } from "@/features/recording/constraints";
+import { uploadInChunks } from "@/features/recording/chunked-upload";
 import { uploadToStorage } from "@/features/recording/direct-upload";
 import { MEDIA_ERROR_MESSAGES } from "@/features/recording/media";
 import { useAudioLevel } from "@/features/recording/use-audio-level";
@@ -348,13 +349,45 @@ export function SessionRunner({
       });
     };
 
+    const uploadInParts = async () => {
+      const total = totalBytes || 1;
+      const loaded = { media: 0, audio: 0 };
+      const report = () =>
+        setUpload({ progress: Math.min(1, (loaded.media + loaded.audio) / total), error: null });
+      const media = await uploadInChunks(result.media, {
+        sessionId: session.id,
+        role: "media",
+        onProgress: (n) => ((loaded.media = n), report()),
+      });
+      const audio = result.audio
+        ? await uploadInChunks(result.audio, {
+            sessionId: session.id,
+            role: "audio",
+            onProgress: (n) => ((loaded.audio = n), report()),
+          })
+        : null;
+      await apiFetch(`/api/sessions/${session.id}/recording`, {
+        method: "POST",
+        json: { kind, durationMs, elapsedSec, media, audio },
+      });
+    };
+
     try {
-      // Small recordings go through the server: fewer moving parts. Larger ones
-      // upload straight to storage (server request bodies are capped at ~4.5 MB).
-      if (!directUploadPrefix || totalBytes <= MAX_FUNCTION_UPLOAD_BYTES) {
+      // Small recordings go in one request. Larger ones (server requests are
+      // capped at ~4.5 MB) go straight to storage when that's set up, otherwise
+      // through the server in parts, which is also the fallback.
+      if (totalBytes <= MAX_FUNCTION_UPLOAD_BYTES) {
         await uploadThroughServer();
+      } else if (directUploadPrefix) {
+        try {
+          await uploadDirect(directUploadPrefix);
+        } catch (e) {
+          if (!(e instanceof ApiError && e.code === "DIRECT_UPLOAD")) throw e;
+          setUpload({ progress: 0, error: null });
+          await uploadInParts();
+        }
       } else {
-        await uploadDirect(directUploadPrefix);
+        await uploadInParts();
       }
       setResult(null);
       setPhase("processing");

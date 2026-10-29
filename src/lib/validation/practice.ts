@@ -51,10 +51,19 @@ export const uploadMetaSchema = z.object({
     .max(11 * 60),
 });
 
-const storedFileSchema = z.object({
-  key: z.string().min(1).max(300),
-  mimeType: z.string().min(1).max(100),
-});
+const storedFileSchema = z.union([
+  // Uploaded straight to storage by the browser.
+  z.object({
+    key: z.string().min(1).max(300),
+    mimeType: z.string().min(1).max(100),
+  }),
+  // Uploaded through the server in parts.
+  z.object({
+    uploadId: z.string().min(1).max(64),
+    parts: z.number().int().min(1).max(64),
+    mimeType: z.string().min(1).max(100),
+  }),
+]);
 
 /** A recording the browser already uploaded straight to storage. */
 export const storedRecordingSchema = uploadMetaSchema.extend({

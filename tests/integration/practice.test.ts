@@ -1,6 +1,7 @@
 import { processAchievementsForSession } from "@/features/achievements/engine";
 import {
   applySessionEvent,
+  attachRecordingUpload,
   attachStoredRecording,
   authorizeRecordingUpload,
   createPracticeSession,
@@ -11,6 +12,7 @@ import {
   recordingPrefix,
   retrySessionProcessing,
   saveRecording,
+  storeRecordingChunk,
 } from "@/features/practice/service";
 import { getRandomTopic } from "@/features/topics/service";
 import { mockTranscriptionService } from "@/features/transcription/service";
@@ -339,5 +341,94 @@ describe("direct-to-storage uploads", () => {
       attachStoredRecording(user.id, id, { ...base, media: { key, mimeType: "audio/webm" } }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await storage.exists(key)).toBe(true);
+  });
+});
+
+describe("uploads in parts", () => {
+  const uploadId = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+  it("joins the parts into one recording and removes them", async () => {
+    const user = await createTestUser();
+    const { id } = await newSession(user.id, true);
+    const video = webm(5000);
+    const audio = webm(300);
+    const audioId = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+
+    await storeRecordingChunk(user.id, id, {
+      uploadId,
+      role: "media",
+      index: 0,
+      bytes: video.slice(0, 3000),
+    });
+    await storeRecordingChunk(user.id, id, {
+      uploadId,
+      role: "media",
+      index: 1,
+      bytes: video.slice(3000),
+    });
+    await storeRecordingChunk(user.id, id, {
+      uploadId: audioId,
+      role: "audio",
+      index: 0,
+      bytes: audio,
+    });
+
+    await attachRecordingUpload(user.id, id, {
+      kind: "VIDEO",
+      durationMs: 1000,
+      elapsedSec: 1,
+      media: { uploadId, parts: 2, mimeType: "video/webm;codecs=vp8,opus" },
+      audio: { uploadId: audioId, parts: 1, mimeType: "audio/webm" },
+    });
+
+    const rec = await db.recording.findUniqueOrThrow({ where: { sessionId: id } });
+    expect(rec).toMatchObject({ kind: "VIDEO", sizeBytes: 5000, audioSizeBytes: 300 });
+    expect([...(await getStorage().get(rec.storageKey))]).toEqual([...video]);
+    const prefix = recordingPrefix(user.id, id);
+    expect(await getStorage().exists(`${prefix}${uploadId}-media-0.part`)).toBe(false);
+    expect((await getOwnedSession(user.id, id)).status).toBe("PROCESSING");
+
+    // A repeated submit is a clear conflict.
+    await expect(
+      attachRecordingUpload(user.id, id, {
+        kind: "VIDEO",
+        durationMs: 1000,
+        elapsedSec: 1,
+        media: { uploadId, parts: 2, mimeType: "video/webm" },
+        audio: { uploadId: audioId, parts: 1, mimeType: "audio/webm" },
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("rejects bad parts, other users and missing pieces", async () => {
+    const alice = await createTestUser();
+    const mallory = await createTestUser();
+    const { id } = await newSession(alice.id);
+    const bytes = webm(100);
+
+    await expect(
+      storeRecordingChunk(mallory.id, id, { uploadId, role: "media", index: 0, bytes }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      storeRecordingChunk(alice.id, id, { uploadId: "../x", role: "media", index: 0, bytes }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(
+      storeRecordingChunk(alice.id, id, { uploadId, role: "media", index: -1, bytes }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(
+      storeRecordingChunk(alice.id, id, { uploadId, role: "audio", index: 0, bytes }),
+    ).rejects.toMatchObject({ code: "UPLOAD" });
+
+    // Only part 0 of 2 arrived.
+    await storeRecordingChunk(alice.id, id, { uploadId, role: "media", index: 0, bytes });
+    await expect(
+      attachRecordingUpload(alice.id, id, {
+        kind: "AUDIO",
+        durationMs: 1000,
+        elapsedSec: 1,
+        media: { uploadId, parts: 2, mimeType: "audio/webm" },
+      }),
+    ).rejects.toMatchObject({ code: "UPLOAD" });
+    expect((await getOwnedSession(alice.id, id)).status).not.toBe("PROCESSING");
   });
 });

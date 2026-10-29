@@ -800,6 +800,13 @@ Do not mark AI integration complete until the real provider has been tested.
       tracked in RateLimitBucket ("practice:daily:<userId>") so deleting sessions
       doesn't reset it. Checked when a session starts and counted on submit
       (src/features/practice/daily-limit.ts); the practice page warns at 3 or fewer.
+    - Since day one: the first completed session is the starting assessment
+      (src/features/progress/journey.ts). The dashboard's "Your journey" card compares
+      it with the average of the latest 3 sessions; reports show "+N vs your first
+      session"; the practice page labels a new user's first session.
+    - Interview mode (opt-in): follow-up questions are read aloud with the browser's
+      speechSynthesis (on-device, no AI cost) and answer recording starts when the
+      question ends; the score and verdict are read back.
 
     33.9 Content Security Policy
     Middleware emits a CSP per request. Dynamically rendered routes get a nonce

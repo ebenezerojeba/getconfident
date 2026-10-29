@@ -24,6 +24,7 @@ import { ACHIEVEMENTS } from "@/features/achievements/catalog";
 import { coachReportSchema } from "@/features/ai-coach/schema";
 import { SessionList } from "@/features/practice/components/recent-sessions";
 import { formatDuration } from "@/features/progress/analytics";
+import { JourneyCard } from "@/features/progress/components/journey-card";
 import { TrendBars, TrendLine } from "@/features/progress/components/lazy-charts";
 import { StatTile } from "@/features/progress/components/stat-tile";
 import { getProgress, getRecentSessions } from "@/features/progress/service";
@@ -149,11 +150,13 @@ export default async function DashboardPage({
         </div>
       </section>
 
+      {progress.journey ? <JourneyCard journey={progress.journey} /> : null}
+
       {!hasData ? (
         <EmptyState
           icon={Mic}
           title="Your progress will appear here"
-          description="Complete your first practice session to see scores, trends and filler-word stats."
+          description="Your first session is your starting assessment. Every session after it shows how far you've come."
         >
           <Button asChild>
             <Link href="/practice">Start your first session</Link>

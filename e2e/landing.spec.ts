@@ -33,11 +33,11 @@ test.describe("landing page", () => {
 
   test("has SEO and Open Graph metadata", async ({ page, request }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Comm Coach/);
+    await expect(page).toHaveTitle(/GetConfident/);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /impromptu/i);
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
       "content",
-      /Comm Coach/,
+      /GetConfident/,
     );
     const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
     expect(ogImage).toBeTruthy();

@@ -2,36 +2,18 @@
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
-import { useCallback, useSyncExternalStore } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useBrowserSupport, usePersistentFlag } from "@/hooks/use-persistent-flag";
 import { isLiveCoachSupported, PACE, type PaceLabel } from "@/features/recording/use-live-coach";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "live-coach-enabled";
-const listeners = new Set<() => void>();
-
 /** The live coach on/off choice, remembered on this device. */
 export function useLiveCoachPreference() {
-  const enabled = useSyncExternalStore(
-    (notify) => {
-      listeners.add(notify);
-      return () => listeners.delete(notify);
-    },
-    () => window.localStorage.getItem(STORAGE_KEY) === "1",
-    () => false,
-  );
-  const supported = useSyncExternalStore(
-    () => () => {},
-    isLiveCoachSupported,
-    () => false,
-  );
-  const setEnabled = useCallback((value: boolean) => {
-    window.localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
-    listeners.forEach((l) => l());
-  }, []);
+  const [enabled, setEnabled] = usePersistentFlag("live-coach-enabled");
+  const supported = useBrowserSupport(isLiveCoachSupported);
   return { enabled: enabled && supported, supported, setEnabled };
 }
 

@@ -34,6 +34,7 @@ import { FollowUpSection } from "@/features/follow-up/components/follow-up-secti
 import { highlightTranscript } from "@/features/filler-analysis/highlight";
 import { formatClock } from "@/features/practice/timer";
 import { requireUser } from "@/lib/auth/current-user";
+import { db } from "@/lib/db/client";
 
 export const metadata: Metadata = { title: "Session report" };
 
@@ -78,6 +79,17 @@ export default async function SessionReportPage({ params }: { params: Promise<{ 
   }
 
   const { session, report, fillers, speech, transcript, recording, provider } = result.data;
+  // The user's first completed session is their starting assessment.
+  const firstSession = await db.practiceSession.findFirst({
+    where: { userId: user.id, status: "COMPLETED", analysis: { isNot: null } },
+    orderBy: { completedAt: "asc" },
+    select: { id: true, analysis: { select: { overallScore: true } } },
+  });
+  const isBaseline = firstSession?.id === session.id;
+  const sinceDayOne =
+    firstSession && !isBaseline && firstSession.analysis
+      ? report.overallScore - firstSession.analysis.overallScore
+      : null;
   const mode = getMode(session.mode as PracticeMode);
   const d = report.dimensions;
   const t = report.toastmasters;
@@ -123,7 +135,22 @@ export default async function SessionReportPage({ params }: { params: Promise<{ 
             <h1 className="text-2xl leading-snug font-semibold text-balance">
               {session.topicText}
             </h1>
-            <p className="font-medium text-primary">{scoreLabel(report.overallScore)}</p>
+            <p className="font-medium text-primary">
+              {scoreLabel(report.overallScore)}
+              {isBaseline ? (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  · Your starting score
+                </span>
+              ) : sinceDayOne !== null ? (
+                <span
+                  className="ml-2 text-sm font-normal text-muted-foreground"
+                  data-testid="since-day-one"
+                >
+                  · {sinceDayOne > 0 ? "+" : ""}
+                  {sinceDayOne} vs your first session
+                </span>
+              ) : null}
+            </p>
             <p className="text-muted-foreground">{report.summary}</p>
             <ShareResultButton
               sessionId={session.id}

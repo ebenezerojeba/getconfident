@@ -1,5 +1,5 @@
 export const siteConfig = {
-  name: "Comm Coach",
+  name: "GetConfident",
   tagline: "AI Impromptu Speaking Coach",
   description:
     "Practice impromptu speaking with random topics, a focused timer and instant AI feedback on clarity, confidence, structure and filler words.",

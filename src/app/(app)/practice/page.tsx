@@ -20,10 +20,11 @@ export default async function PracticePage({
   const { mode } = await searchParams;
   const initialMode = PRACTICE_MODES.some((m) => m.id === mode) ? (mode as PracticeMode) : null;
   const user = await requireUser();
-  const [prefs, daily, allowance] = await Promise.all([
+  const [prefs, daily, allowance, completed] = await Promise.all([
     db.userPreferences.findUnique({ where: { userId: user.id } }),
     getDailyChallenge(user.timezone),
     dailySessionsRemaining(user.id),
+    db.practiceSession.count({ where: { userId: user.id, status: "COMPLETED" } }),
   ]);
 
   return (
@@ -32,6 +33,14 @@ export default async function PracticePage({
         title="Practice"
         description="Choose how you want to practice, get a topic, then speak."
       />
+      {completed === 0 ? (
+        <Alert role="status" data-testid="starting-assessment">
+          <AlertDescription>
+            <span className="font-medium text-foreground">This is your starting assessment.</span>{" "}
+            Speak naturally. Your first score is the baseline we measure your progress from.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {allowance.remaining <= 3 ? (
         <Alert role="status">
           <AlertDescription>

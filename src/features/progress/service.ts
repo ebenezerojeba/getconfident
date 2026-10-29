@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db/client";
 
 import { computeProgress, type RangeKey, rangeStart, type SessionPoint } from "./analytics";
+import { computeJourney } from "./journey";
 
 /** Loads completed sessions for the user (optionally within a range) and computes progress. */
 export async function getProgress(
@@ -47,7 +48,11 @@ export async function getProgress(
     fillerPerMinute: r.analysis!.fillerPerMinute,
     wordsPerMinute: r.analysis!.wordsPerMinute,
   }));
-  return computeProgress(points, timeZone, now);
+  return {
+    ...computeProgress(points, timeZone, now),
+    // "Since day one" needs the full history, so only for the all-time range.
+    journey: range === "all" ? computeJourney(points) : null,
+  };
 }
 
 export async function getRecentSessions(userId: string, take = 5) {

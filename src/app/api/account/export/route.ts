@@ -68,7 +68,7 @@ export const GET = withUser(
     return new NextResponse(body, {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Content-Disposition": `attachment; filename="comm-coach-export-${new Date().toISOString().slice(0, 10)}.json"`,
+        "Content-Disposition": `attachment; filename="getconfident-export-${new Date().toISOString().slice(0, 10)}.json"`,
         "Cache-Control": "private, no-store",
       },
     });

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, MessageSquarePlus, Mic, Square, Target } from "lucide-react";
+import { CheckCircle2, MessageSquarePlus, Mic, Square, Target, Volume2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -8,6 +8,8 @@ import { ErrorState, Spinner } from "@/components/shared/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { MEDIA_ERROR_MESSAGES } from "@/features/recording/media";
 import { MAX_FUNCTION_UPLOAD_BYTES } from "@/features/recording/constraints";
 import { useMediaRecorder } from "@/features/recording/use-media-recorder";
@@ -16,6 +18,7 @@ import { scoreTone } from "@/features/ai-coach/components/report-parts";
 import { cn } from "@/lib/utils";
 
 import { type FollowUpEvaluation, followUpEvaluationSchema, MAX_FOLLOW_UPS } from "../schema";
+import { useInterviewerVoice } from "../use-interviewer-voice";
 
 export type FollowUpTurn = {
   order: number;
@@ -65,8 +68,15 @@ export function FollowUpSection({
   const [busy, setBusy] = useState(false);
   const [answering, setAnswering] = useState(false);
   const recorder = useMediaRecorder(false);
+  const voice = useInterviewerVoice();
   const pending = turns.find((t) => !t.answerText);
   const limitReached = turns.length >= MAX_FOLLOW_UPS && !pending;
+
+  const startAnswer = async () => {
+    voice.stop();
+    if (!(await recorder.requestAccess())) return;
+    if (recorder.start()) setAnswering(true);
+  };
 
   const askNext = async () => {
     setBusy(true);
@@ -80,16 +90,13 @@ export function FollowUpSection({
           ? t
           : [...t, { ...question, answerText: null, score: null, evaluation: null }],
       );
+      // Interview mode: ask out loud, then start listening when the question ends.
+      if (voice.enabled) voice.speak(question.question, () => void startAnswer());
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Couldn't get the next question.");
     } finally {
       setBusy(false);
     }
-  };
-
-  const startAnswer = async () => {
-    if (!(await recorder.requestAccess())) return;
-    if (recorder.start()) setAnswering(true);
   };
 
   const submitAnswer = async () => {
@@ -111,6 +118,12 @@ export function FollowUpSection({
         () => {},
       )) as { answer: { order: number; answerText: string; score: number; evaluation: unknown } };
       setTurns((t) => t.map((x) => (x.order === res.answer.order ? { ...x, ...res.answer } : x)));
+      if (voice.enabled) {
+        const verdict = followUpEvaluationSchema.safeParse(res.answer.evaluation);
+        voice.speak(
+          `${res.answer.score} out of 100.${verdict.success ? ` ${verdict.data.verdict}` : ""}`,
+        );
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Couldn't submit your answer.");
     } finally {
@@ -128,6 +141,27 @@ export function FollowUpSection({
         <CardDescription>
           Keep the conversation going. Answer out loud, just like in a real interview.
         </CardDescription>
+        {voice.supported ? (
+          <div className="flex items-start gap-3 pt-2">
+            <Switch
+              id="interviewer-voice"
+              checked={voice.enabled}
+              onCheckedChange={(on) => {
+                voice.setEnabled(on);
+                if (!on) voice.stop();
+              }}
+              aria-describedby="interviewer-voice-help"
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="interviewer-voice">Interview mode</Label>
+              <p id="interviewer-voice-help" className="text-xs text-muted-foreground">
+                The coach asks each question out loud and starts recording your answer when it
+                finishes, like a real interviewer.
+              </p>
+            </div>
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <ol className="space-y-4">
@@ -141,7 +175,18 @@ export function FollowUpSection({
                 <Badge variant="secondary" className="mt-0.5 shrink-0">
                   Q{t.order}
                 </Badge>
-                <p className="font-medium">{t.question}</p>
+                <p className="flex-1 font-medium">{t.question}</p>
+                {voice.supported && !t.answerText ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={() => voice.speak(t.question)}
+                    aria-label={`Hear question ${t.order} again`}
+                  >
+                    <Volume2 />
+                  </Button>
+                ) : null}
               </div>
               {t.answerText ? (
                 <>
@@ -163,7 +208,16 @@ export function FollowUpSection({
 
         <div className="flex flex-wrap items-center gap-2" aria-live="polite">
           {pending ? (
-            answering ? (
+            voice.speaking && !answering ? (
+              <>
+                <Badge variant="secondary" className="gap-1.5">
+                  <Volume2 className="size-3" aria-hidden="true" /> The interviewer is asking…
+                </Badge>
+                <Button variant="outline" onClick={startAnswer} disabled={busy}>
+                  <Mic /> Answer now
+                </Button>
+              </>
+            ) : answering ? (
               <>
                 <Badge variant="secondary" className="gap-1.5">
                   <span className="size-2 rounded-full bg-destructive motion-safe:animate-pulse" />

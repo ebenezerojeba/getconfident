@@ -1,4 +1,4 @@
-# Comm Coach — AI Impromptu Speaking Coach
+# GetConfident — AI Impromptu Speaking Coach
 
 Practice impromptu speaking against a random topic and a timer, then get instant, specific AI
 coaching on clarity, structure, confidence, pace and filler words.

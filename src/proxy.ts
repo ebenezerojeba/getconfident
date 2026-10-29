@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, SESSION_TTL_MS, sessionCookieOptions } from "@/lib/auth/cookies";
 
 /**
- * Edge middleware. This is an optimistic first line only:
+ * Request proxy (formerly "middleware"). This is an optimistic first line only:
  *  - redirects visitors without a session cookie away from app pages;
  *  - rejects cross-origin state-changing API requests (CSRF defence).
  * Authoritative authentication/authorization happens server-side on every
@@ -77,7 +77,7 @@ function buildCsp(nonce: string | null): string {
   ].join("; ");
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (pathname.startsWith("/api/")) {

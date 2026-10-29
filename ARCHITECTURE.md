@@ -677,7 +677,7 @@ Do not mark AI integration complete until the real provider has been tested.
       `__Host-` prefixed in production). The database stores HMAC-SHA256(AUTH_SECRET,
       token) as AuthSession.id, never the token itself.
     - Expiry: 30 days, sliding. The DB expiry is extended server-side when <15 days remain.
-      Cookies are re-issued by middleware on full page loads and by API route handlers.
+      Cookies are re-issued by the proxy (src/proxy.ts) on full page loads and by API route handlers.
       Middleware does NOT re-issue on RSC/server-action requests: after sign-out, a server
       action's internal redirect render still carries the old cookie.
     - Password change invalidates all other sessions. "Sign out other devices" exists.
@@ -781,7 +781,7 @@ Do not mark AI integration complete until the real provider has been tested.
     not stored and stop working once the password changes (single use). Requests always get
     the same response and the email is sent after responding, so they don't reveal which
     emails have accounts. A reset signs the user out everywhere. /privacy and /terms are
-    static pages (listed in the middleware's STATIC_PAGES); NEXT_PUBLIC_CONTACT_EMAIL sets
+    static pages (listed in the proxy's STATIC_PAGES); NEXT_PUBLIC_CONTACT_EMAIL sets
     the contact address shown on them.
 
     33.9 Content Security Policy

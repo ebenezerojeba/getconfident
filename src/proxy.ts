@@ -18,6 +18,7 @@ const PROTECTED_PREFIXES = [
   "/achievements",
   "/settings",
   "/onboarding",
+  "/admin",
 ];
 
 /** API routes that accept cross-origin/server-to-server calls with their own verification. */

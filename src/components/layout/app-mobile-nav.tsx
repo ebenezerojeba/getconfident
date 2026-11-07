@@ -15,7 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-export function AppMobileNav() {
+export function AppMobileNav({ showAdmin = false }: { showAdmin?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -34,7 +34,7 @@ export function AppMobileNav() {
           <SheetDescription className="sr-only">App navigation</SheetDescription>
         </SheetHeader>
         <nav aria-label="App" className="px-3">
-          <AppNavLinks onNavigate={() => setOpen(false)} />
+          <AppNavLinks onNavigate={() => setOpen(false)} showAdmin={showAdmin} />
         </nav>
       </SheetContent>
     </Sheet>

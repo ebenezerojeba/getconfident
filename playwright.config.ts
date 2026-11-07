@@ -44,6 +44,8 @@ export default defineConfig({
       // E2E runs use the isolated mock AI provider (no real credentials in CI).
       AI_PROVIDER: process.env.E2E_AI_PROVIDER ?? "mock",
       ALLOW_MOCK_AI_IN_PRODUCTION: "1",
+      // e2e/admin.spec.ts signs in as this account to test the admin dashboard.
+      ADMIN_EMAILS: "admin-e2e@example.com",
     },
   },
 });

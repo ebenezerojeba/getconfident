@@ -3,14 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { appNav, isActiveNav } from "@/config/app-nav";
+import { adminNavItem, appNav, isActiveNav } from "@/config/app-nav";
 import { cn } from "@/lib/utils";
 
-export function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
+export function AppNavLinks({
+  onNavigate,
+  showAdmin = false,
+}: {
+  onNavigate?: () => void;
+  showAdmin?: boolean;
+}) {
   const pathname = usePathname();
+  const items = showAdmin ? [...appNav, adminNavItem] : appNav;
   return (
     <ul className="flex flex-col gap-1">
-      {appNav.map(({ title, href, icon: Icon }) => {
+      {items.map(({ title, href, icon: Icon }) => {
         const active = isActiveNav(pathname, href);
         return (
           <li key={href}>

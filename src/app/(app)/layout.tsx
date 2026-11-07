@@ -6,6 +6,7 @@ import { NonceProviders } from "@/app/nonce-providers";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { ThemeSync } from "@/components/theme-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isAdminEmail } from "@/lib/auth/admin-emails";
 import { requireUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  const isAdmin = isAdminEmail(user.email);
   const [prefs, notifications] = await Promise.all([
     db.userPreferences.findUnique({ where: { userId: user.id }, select: { theme: true } }),
     db.notification.findMany({
@@ -39,13 +41,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Logo href="/dashboard" />
           </div>
           <nav aria-label="App" className="flex-1 overflow-y-auto px-3 py-2">
-            <AppNavLinks />
+            <AppNavLinks showAdmin={isAdmin} />
           </nav>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2 border-b surface-glass px-4 sm:px-6">
             <div className="flex items-center gap-2">
-              <AppMobileNav />
+              <AppMobileNav showAdmin={isAdmin} />
               <Logo href="/dashboard" className="lg:hidden" />
             </div>
             <div className="flex items-center gap-1">

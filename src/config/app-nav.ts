@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   History,
   LayoutDashboard,
   LineChart,
@@ -18,6 +19,9 @@ export const appNav: AppNavItem[] = [
   { title: "Achievements", href: "/achievements", icon: Trophy },
   { title: "Settings", href: "/settings", icon: Settings },
 ];
+
+/** Shown only to admins (ADMIN_EMAILS); the page itself is also guarded server-side. */
+export const adminNavItem: AppNavItem = { title: "Admin", href: "/admin", icon: BarChart3 };
 
 export function isActiveNav(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);

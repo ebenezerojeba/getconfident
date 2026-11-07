@@ -77,8 +77,40 @@ function buildCsp(nonce: string | null): string {
   ].join("; ");
 }
 
+/** Main domain from NEXT_PUBLIC_APP_URL (e.g. getconfident.com.ng). */
+const CANONICAL_HOST = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL).host : null;
+  } catch {
+    return null;
+  }
+})();
+
+/** Other addresses that serve the same site and should forward to the main domain. */
+const ALIAS_HOSTS = new Set(
+  CANONICAL_HOST ? [`www.${CANONICAL_HOST}`, "getconfident.vercel.app"] : [],
+);
+
+/**
+ * Sends visitors on www or the old vercel.app address to the main domain, so
+ * links, sign-in cookies and search results all live on one address. Only
+ * page loads are redirected; API calls (uploads, cron) are left alone.
+ */
+function canonicalRedirect(request: NextRequest): NextResponse | null {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (!CANONICAL_HOST || !host || host === CANONICAL_HOST || !ALIAS_HOSTS.has(host)) return null;
+  if (!SAFE_METHODS.has(request.method)) return null;
+  const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${CANONICAL_HOST}`);
+  return NextResponse.redirect(url, 308);
+}
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (!pathname.startsWith("/api/")) {
+    const redirect = canonicalRedirect(request);
+    if (redirect) return redirect;
+  }
 
   if (pathname.startsWith("/api/")) {
     if (

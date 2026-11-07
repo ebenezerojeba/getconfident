@@ -100,7 +100,10 @@ function canonicalRedirect(request: NextRequest): NextResponse | null {
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (!CANONICAL_HOST || !host || host === CANONICAL_HOST || !ALIAS_HOSTS.has(host)) return null;
   if (!SAFE_METHODS.has(request.method)) return null;
-  const url = new URL(request.nextUrl.pathname + request.nextUrl.search, `https://${CANONICAL_HOST}`);
+  const url = new URL(
+    request.nextUrl.pathname + request.nextUrl.search,
+    `https://${CANONICAL_HOST}`,
+  );
   return NextResponse.redirect(url, 308);
 }
 

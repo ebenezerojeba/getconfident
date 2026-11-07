@@ -1,3 +1,5 @@
+import { MarkImage } from "@/components/layout/brand-icon";
+import { BRAND_COLORS } from "@/components/layout/brand-mark";
 import { scoreLabel } from "@/features/ai-coach/components/report-parts";
 
 export type ShareCardData = {
@@ -19,38 +21,19 @@ export function ShareCardImage({ appName, host, score, topic, stats }: ShareCard
         flexDirection: "column",
         justifyContent: "space-between",
         padding: 80,
-        background: "linear-gradient(140deg, #1d1a4a 0%, #4338ca 55%, #f0714f 100%)",
+        background: `radial-gradient(ellipse 90% 60% at 90% 0%, #2a2a8a 0%, ${BRAND_COLORS.navy} 60%)`,
         color: "white",
-        fontFamily: "sans-serif",
+        fontFamily: "Plus Jakarta Sans",
       }}
     >
       <div
         style={{ display: "flex", alignItems: "center", gap: 18, fontSize: 38, fontWeight: 700 }}
       >
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 18,
-            background: "rgba(255,255,255,0.18)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg
-            width="36"
-            height="36"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="white"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          >
-            <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" />
-          </svg>
+        <MarkImage size={72} onDark />
+        <div style={{ display: "flex", letterSpacing: -1 }} aria-label={appName}>
+          <span style={{ color: BRAND_COLORS.violetLight, fontWeight: 500 }}>Get</span>
+          <span style={{ fontWeight: 800 }}>Confident</span>
         </div>
-        {appName}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -61,7 +44,9 @@ export function ShareCardImage({ appName, host, score, topic, stats }: ShareCard
           </div>
           <div style={{ fontSize: 64, opacity: 0.7, paddingBottom: 36 }}>/100</div>
         </div>
-        <div style={{ fontSize: 48, fontWeight: 700 }}>{scoreLabel(score)}</div>
+        <div style={{ fontSize: 48, fontWeight: 700, color: BRAND_COLORS.violetLight }}>
+          {scoreLabel(score)}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 20 }}>
@@ -75,7 +60,8 @@ export function ShareCardImage({ appName, host, score, topic, stats }: ShareCard
               gap: 6,
               padding: "22px 24px",
               borderRadius: 24,
-              background: "rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.08)",
+              border: "2px solid rgba(164,151,255,0.25)",
             }}
           >
             <div style={{ fontSize: 56, fontWeight: 800 }}>{String(s.value)}</div>

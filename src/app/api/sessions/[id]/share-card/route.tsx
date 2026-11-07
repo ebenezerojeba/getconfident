@@ -5,6 +5,7 @@ import { ShareCardImage } from "@/features/ai-coach/components/share-card-image"
 import { getSessionReport } from "@/features/ai-coach/report-data";
 import { parseId, withUser } from "@/lib/api";
 import { notFound } from "@/lib/errors";
+import { brandFonts } from "@/lib/og-fonts";
 
 const SIZE = 1080;
 
@@ -38,7 +39,7 @@ export const GET = withUser<{ id: string }>(async (_req, { user, params }) => {
       topic={topic}
       stats={stats}
     />,
-    { width: SIZE, height: SIZE },
+    { width: SIZE, height: SIZE, fonts: await brandFonts() },
   );
   image.headers.set("Cache-Control", "private, no-store");
   return image;

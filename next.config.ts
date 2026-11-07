@@ -14,6 +14,12 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   serverExternalPackages: ["@node-rs/argon2"],
+  // Brand font files read at runtime by next/og image routes.
+  outputFileTracingIncludes: {
+    "/api/sessions/[id]/share-card": ["./src/assets/fonts/*.woff"],
+    "/opengraph-image*": ["./src/assets/fonts/*.woff"],
+    "/twitter-image*": ["./src/assets/fonts/*.woff"],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

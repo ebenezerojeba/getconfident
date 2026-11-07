@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+<style>.g{fill:#0B1A3A;stroke:#0B1A3A}.a{fill:#6A4CFF;stroke:#6A4CFF}@media (prefers-color-scheme:dark){.g{fill:#FFFFFF;stroke:#FFFFFF}.a{fill:#A497FF;stroke:#A497FF}}</style>
+<path class="g" d="M50 13.5H48A34.5 34.5 0 1 0 82.5 48" style="fill:none" stroke-width="19" stroke-linecap="round"/>
+<path class="g" d="M51.6 37H87.5Q92 37 92 41.5V48L91.36 55.5H51.6A9.25 9.25 0 0 1 51.6 37ZM10.2 71.3L7.8 86.9L24.2 85.3L28 72Z" stroke-width="1.5" stroke-linejoin="round"/>
+<path class="a" d="M51.6 47.2L72.5 25.4" style="fill:none" stroke-width="13" stroke-linecap="round"/>
+<path class="a" d="M88.2 9.1L62.8 15.6L82.2 35.1Z" stroke-width="2" stroke-linejoin="round"/>
+</svg>

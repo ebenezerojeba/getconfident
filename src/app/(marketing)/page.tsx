@@ -17,18 +17,7 @@ export const metadata: Metadata = {
   title: { absolute: `${siteConfig.name} · ${siteConfig.tagline}` },
   description: siteConfig.description,
   alternates: { canonical: "/" },
-  openGraph: {
-    type: "website",
-    url: "/",
-    siteName: siteConfig.name,
-    title: `${siteConfig.name} · ${siteConfig.tagline}`,
-    description: siteConfig.description,
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: `${siteConfig.name} · ${siteConfig.tagline}`,
-    description: siteConfig.description,
-  },
+  // Link-preview tags and image are inherited from the root layout.
 };
 
 export default function HomePage() {

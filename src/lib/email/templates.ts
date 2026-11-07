@@ -13,7 +13,7 @@ export function escapeHtml(value: string): string {
 }
 
 const SETTINGS_FOOTER = `You're receiving this because of your notification settings.
-      <a href="${siteConfig.url}/settings" style="color:#4f46e5">Change them here</a>.`;
+      <a href="${siteConfig.url}/settings" style="color:#6a4cff">Change them here</a>.`;
 
 function layout(
   heading: string,
@@ -22,19 +22,19 @@ function layout(
   footerHtml: string = SETTINGS_FOOTER,
 ) {
   return `<!doctype html>
-<html lang="en"><body style="margin:0;background:#f5f5fb;font-family:ui-sans-serif,system-ui,sans-serif;color:#1b1b2b">
+<html lang="en"><body style="margin:0;background:#f5f6fa;font-family:ui-sans-serif,system-ui,sans-serif;color:#0b1a3a">
   <div style="max-width:560px;margin:0 auto;padding:32px 24px">
-    <p style="font-weight:700;font-size:18px;margin:0 0 24px">${siteConfig.name}</p>
+    <p style="font-size:20px;letter-spacing:-0.5px;margin:0 0 24px"><span style="font-weight:500;color:#6a4cff">Get</span><span style="font-weight:800;color:#0b1a3a">Confident</span></p>
     <div style="background:#fff;border-radius:16px;padding:28px">
       <h1 style="margin:0 0 12px;font-size:22px">${heading}</h1>
       ${bodyHtml}
       ${
         cta
-          ? `<p style="margin:24px 0 0"><a href="${cta.href}" style="background:#4f46e5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block">${cta.label}</a></p>`
+          ? `<p style="margin:24px 0 0"><a href="${cta.href}" style="background:#6a4cff;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block">${cta.label}</a></p>`
           : ""
       }
     </div>
-    <p style="color:#6b6b83;font-size:12px;margin:24px 0 0">
+    <p style="color:#525c76;font-size:12px;margin:24px 0 0">
       ${footerHtml}
     </p>
   </div>
@@ -103,7 +103,7 @@ export function weeklySummaryEmail(params: {
   const table = rows
     .map(
       ([label, value]) =>
-        `<tr><td style="padding:8px 0;color:#6b6b83">${label}</td><td style="padding:8px 0;text-align:right;font-weight:600">${value}</td></tr>`,
+        `<tr><td style="padding:8px 0;color:#525c76">${label}</td><td style="padding:8px 0;text-align:right;font-weight:600">${value}</td></tr>`,
     )
     .join("");
   return {

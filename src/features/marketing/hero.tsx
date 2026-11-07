@@ -94,8 +94,8 @@ export function Hero() {
           <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 text-xs">
             <Mic className="size-3.5 text-primary" /> AI speaking coach for real-world moments
           </Badge>
-          <h1 className="text-display font-semibold">
-            Think fast. <span className="text-brand-gradient">Speak with confidence.</span>
+          <h1 className="text-display font-extrabold">
+            Speak clearly. <span className="text-brand-gradient">Speak confidently.</span>
           </h1>
           <p className="max-w-xl text-lg text-muted-foreground">
             Get a random topic, speak for as long as you choose, and receive instant, specific

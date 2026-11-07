@@ -42,8 +42,8 @@ export default async function OpengraphImage() {
             letterSpacing: -3,
           }}
         >
-          <span>Speak Clearly.</span>
-          <span style={{ color: BRAND_COLORS.violetLight }}>Speak Confidently.</span>
+          <span>Think fast.</span>
+          <span style={{ color: BRAND_COLORS.violetLight }}>Speak with confidence.</span>
         </div>
         <div style={{ fontSize: 32, opacity: 0.8 }}>
           Random topics · A focused timer · Instant AI coaching

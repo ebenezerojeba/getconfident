@@ -1,7 +1,7 @@
 export const siteConfig = {
   name: "GetConfident",
   tagline: "AI Impromptu Speaking Coach",
-  slogan: "Speak Clearly. Speak Confidently.",
+  slogan: "Think fast. Speak with confidence.",
   description:
     "Practise impromptu speaking out loud and get instant AI coaching on clarity, confidence, structure and filler words. Ace interviews, presentations and everyday conversations.",
   /**

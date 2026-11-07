@@ -4,7 +4,7 @@ test.describe("landing page", () => {
   test("renders every section with a single h1", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Speak confidently");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Speak with confidence");
     for (const name of [
       /Deliberate practice/,
       /From prompt to feedback/,
